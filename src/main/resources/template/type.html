@@ -1,0 +1,100 @@
+<p>
+  {{#flags}}
+  {{^isEnabled}}
+  <span class="badge bg-danger">disabled</span>
+  {{/isEnabled}}
+  {{#isExperimental}}
+  <span class="badge bg-danger">experimental</span>
+  {{/isExperimental}}
+  {{#isInternal}}
+  <span class="badge bg-danger">internal</span>
+  {{/isInternal}}
+  {{#throttle}}
+  <span class="badge bg-secondary">throttle</span>
+  {{/throttle}}
+  {{#cutoff}}
+  <span class="badge bg-secondary">cutoff</span>
+  {{/cutoff}}
+  {{#enabledInConfigs}}
+  <span class="badge bg-success" title="enabled in config {{.}}.jfc">{{.}}</span>
+  {{/enabledInConfigs}}
+  {{#hasStartTime}}
+  <span class="badge bg-info">startTime</span>
+  {{/hasStartTime}}
+  {{#hasThread}}
+  <span class="badge bg-info">thread</span>
+  {{/hasThread}}
+  {{#hasStackTrace}}
+  <span class="badge bg-info">stackTrace</span>
+  {{/hasStackTrace}}
+  {{#since}}
+  <span class="badge bg-warning">JDK {{.}}+</span>
+  {{/since}}
+  {{#until}}
+  <span class="badge bg-danger">till JDK {{.}}</span>
+  {{/until}}
+  {{/flags}}
+</p>
+{{#source}}
+<p class="source">Source {{.}}</p>
+{{/source}}
+<p class="categories"><span class="fw-light">Category:</span>
+  {{#categories}}
+  {{value}} {{^last}} / {{/last}}
+  {{/categories}}
+</p>
+{{{appearsIn}}}
+<p class="event-description b-1 l-1 r-1">
+  {{#description}}
+  {{{.}}}
+  {{/description}}
+<p class="event-additional-description {{#description}}t-1{{/description}}">
+  {{#additionalDescription}}
+  {{.}}
+  {{/additionalDescription}}
+  {{#descriptionMissing}}
+<p class="description-missing">No additional description available.
+  Write your own and contribute it to
+  <a href="https://github.com/parttimenerd/jfreventcollector/blob/main/additional.xml">jfreventcollector</a>.
+</p>
+{{/descriptionMissing}}
+</p>
+</p>
+{{#configurations}}
+<p>
+<table class="table event-config table-hover">
+  <thead>
+  <tr>
+    <th scope="col" style="width: 10em;">Configuration</th>
+    {{#headers}}
+    <th scope="col" style="width: 10em;">{{.}}</th>
+    {{/headers}}
+    <th scope="col">{{lastHeader}}</th>
+  </tr>
+  </thead>
+  <tbody>
+  {{#rows}}
+  <tr>
+    <th scope="row">{{name}}</th>
+    {{#cells}}
+    <td>{{.}}</td>
+    {{/cells}}
+  </tr>
+  {{/rows}}
+  </tbody>
+</table>
+</p>
+{{/configurations}}
+{{#fields}}
+<p>{{{.}}}</p>
+{{/fields}}
+<details>
+  <summary>Examples
+    {{#appearedIn}}
+    <span class="badge bg-secondary" title="appeared in example {{.}}">{{.}}</span>
+    {{/appearedIn}}
+  </summary>
+  sdfgjlsdfbgl
+  sdfgjbsdfgsdfg
+
+</details>
