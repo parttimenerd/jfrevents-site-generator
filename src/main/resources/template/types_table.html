@@ -1,52 +1,47 @@
-{{!
-data class FieldScope(
-val name: String,
-val type: String,
-val contentType: String?,
-val struct: Boolean,
-val array: Boolean,
-val experimental: Boolean,
-val transition: String?,
-val since: String?,
-val until: String?,
-val label: String,
-val description: String?,
-val additionalDescription: String?
-)
-
-idea
-- name (transition) (since) (until) (experimental)
-- type: contentType (struct) (array)
-- label (in medium font) description additionalDescription
-}}
-{{#fields.size}}
-<table class="table table-hover field-table">
+<table class="table table-hover types-table">
     <thead>
         <tr>
-            <th scope="col" style="width: 13em;">field</th>
-            <th scope="col" style="width: 13em;">type</th>
-            <th scope="col">description</th>
+            <th scope="col" style="width: 2em;"></th>
+            <th scope="col" style="width: 2em;"></th>
         </tr>
     </thead>
     <tbody>
-        {{#fields}}
+        {{#parameterType}}
         <tr>
-            <th scope="row">{{name}}</th>
+            <th scope="row">Parameter Type</th>
             <td>
-                {{type}}{{#contentType}}: {{contentType}}{{/contentType}}
-                {{#struct}} <span class="badge bg-info">struct</span>{{/struct}}
-                {{#array}} <span class="badge bg-info">array</span>{{/array}}
-            </td>
-            <td>
-                {{#label}}<span class="field-label">{{.}}</span>{{/label}} {{#description}}<span class="field-description">{{{.}}}</span>{{/description}} {{#additionalDescription}}<span class="field-description">{{{.}}}</span>{{/additionalDescription}} {{#descriptionMissing}}
-                <span class="description-missing">No description available.
-                    Write your own and contribute it to
-                    <a href="https://github.com/parttimenerd/jfreventcollector/blob/main/additional.xml">jfreventcollector</a>.
-                </span>
-                {{/descriptionMissing}}
+                {{.}}
             </td>
         </tr>
-        {{/fields}}
+        {{/parameterType}}
+        {{#fieldType}}
+        <tr>
+            <th scope="row">Field Type</th>
+            <td>
+                {{.}}
+            </td>
+        </tr>
+        {{/fieldType}}
+        {{#javaType}}
+        <tr>
+            <th scope="row">Java Type</th>
+            <td>
+                {{.}}
+            </td>
+        </tr>
+        {{/javaType}}
+        {{#contentType}}
+        <tr>
+            <th scope="row">Content Type</th>
+            <td>
+                {{#contentTypeLink}}
+                <a href="{{.}}">{{contentType}}</a>
+                {{/contentTypeLink}}
+                {{^contentTypeLink}}
+                {{.}}
+                {{/contentTypeLink}}
+            </td>
+        </tr>
+        {{/contentType}}
     </tbody>
 </table>
-{{/fields.size}}

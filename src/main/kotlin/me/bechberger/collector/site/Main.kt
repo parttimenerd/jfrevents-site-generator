@@ -1,9 +1,10 @@
-package me.bechberger.collector.generator
+package me.bechberger.collector.site
 
 import com.github.mustachejava.util.DecoratedCollection
 import me.bechberger.collector.xml.AbstractType
 import me.bechberger.collector.xml.Event
 import me.bechberger.collector.xml.Example
+import me.bechberger.collector.xml.FieldType
 import me.bechberger.collector.xml.Loader
 import me.bechberger.collector.xml.SingleEventConfiguration
 import me.bechberger.collector.xml.Type
@@ -15,25 +16,48 @@ import java.time.LocalDate
 import java.util.TreeMap
 import kotlin.io.path.exists
 
-class Main(val target: Path, val resourceFolder: Path? = null) {
+/**
+ * @param fileNamePrefix the prefix for all but the index.html, the latter is named prefix.html
+ */
+class Main(
+    val target: Path,
+    val resourceFolder: Path? = null,
+    val fileNamePrefix: String = ""
+) {
 
     val versions = Loader.getVersions()
     val versionToFileName = versions.associateWithTo(TreeMap<Int, String>()) {
-        if (it != versions.last() - 1) "$it.html" else "index.html"
+        if (it != versions.last() - 1) "$fileNamePrefix$it.html" else {
+            if (fileNamePrefix != "") "$fileNamePrefix.html" else "index.html"
+        }
     }
     val templating: Templating = Templating(resourceFolder)
 
     init {
         target.toFile().mkdirs()
         downloadBootstrapIfNeeded()
-        templating.copyFromResources(target.resolve("style.css"), "template/style.css")
-        templating.copyFromResources(target.resolve("sapmachine.svg"), "template/sapmachine.svg")
+        templating.copyFromResources(target.resolve("css/style.css"), "template/style.css")
+        templating.copyFromResources(target.resolve("img/sapmachine.svg"), "template/sapmachine.svg")
+        downloadDependendenciesIfNeeded()
+    }
+
+    private fun downloadDependendenciesIfNeeded() {
+        FILES_TO_DOWNLOAD.forEach { (url, targetFile) ->
+            val path = target.resolve(targetFile).toFile()
+            path.parentFile.mkdirs()
+            URL(url).openStream().use { stream ->
+                path.outputStream().use {
+                    it.write(stream.readBytes())
+                }
+            }
+        }
     }
 
     private fun downloadBootstrapIfNeeded() {
         if (!target.resolve("bootstrap").exists()) {
             URL(
-                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" + "bootstrap-$BOOTSTRAP_VERSION-dist.zip"
+                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" +
+                    "bootstrap-$BOOTSTRAP_VERSION-dist.zip"
             ).openStream().use { stream ->
                 target.resolve("bootstrap.zip").toFile().outputStream().use {
                     it.write(stream.readBytes())
@@ -68,6 +92,8 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
 
     fun createPage(version: Int) {
         val metadata = Loader.loadVersion(version)
+        val examples = metadata.events.count { it.examples.isNotEmpty() }
+        println("${metadata.events.size} events ($examples have examples)")
         val infoScope = InfoScope(
             version,
             version == versions.last(),
@@ -107,6 +133,7 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
         val cutoff: Boolean,
         val enabledInConfigs: List<String>,
         val hasStartTime: Boolean,
+        val hasDuration: Boolean,
         val hasStackTrace: Boolean,
         val hasThread: Boolean,
         val period: String?
@@ -198,7 +225,8 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
         val parameterType: String = "",
         val fieldType: String = "",
         val javaType: String = "",
-        val contentType: String = ""
+        val contentType: String = "",
+        val contentTypeLink: String = ""
     )
 
     fun createTypeTableScope(
@@ -209,7 +237,10 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
             type.parameterType,
             type.fieldType,
             type.javaType ?: "",
-            type.contentType ?: ""
+            type.contentType ?: "",
+            type.contentType?.let { contentType ->
+                metadata.getSpecificType(contentType, metadata.xmlContentTypes).toLink()
+            } ?: ""
         )
     }
 
@@ -247,7 +278,7 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
             formatUntil(type.until),
             if (type is Type<*>) formatFields(metadata, type) else null,
             formatAppearsIn(metadata, type),
-            formatExamples(metadata, type),
+            formatTypeExamples(metadata, type),
             if (type is XmlType) formatTypesTable(metadata, type) else null,
             type is XmlType && (type.unsigned ?: false),
             if (type is XmlContentType) type.annotation else null
@@ -290,15 +321,90 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
         )
     }
 
-    data class ExampleScope(val name: String)
+    data class ExampleScope(val name: String, val content: String = "")
 
-    data class ExamplesScope(val appearedIn: DecoratedCollection<String>, val examples: List<ExampleScope>)
+    data class ExamplesScope(val id: String, val examples: DecoratedCollection<ExampleScope>)
+
+    data class TypeExamplesScope(
+        val examples: String,
+        val hasExamples: Boolean,
+        val exampleSize: Int
+    )
+
+    data class SimpleTypeLinkScope(val name: String, val link: String? = null)
+
+    data class ObjectExampleEntryScope(
+        val key: String,
+        val value: String,
+        val type: SimpleTypeLinkScope? = null,
+        val comtentType: SimpleTypeLinkScope? = null
+    )
+
+    data class ExampleEntryScope(
+        val depth: Int,
+        val firstComplex: Boolean,
+        val isTruncated: Boolean,
+        var isNull: Boolean = false,
+        var stringValue: String? = null,
+        var arrayValue: DecoratedCollection<String>? = null,
+        var objectValue: DecoratedCollection<ObjectExampleEntryScope>? = null
+    )
+
+    fun formatExample(
+        metadata: me.bechberger.collector.xml.Metadata,
+        example: Example,
+        depth: Int = 0,
+        firstComplex: Boolean = true
+    ): String {
+        return templating.template(
+            "example_entry.html",
+            when (example.type) {
+                FieldType.STRING -> ExampleEntryScope(depth, false, example.isTruncated).also {
+                    it.stringValue = example.stringValue
+                }
+                FieldType.ARRAY -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
+                    it.arrayValue =
+                        DecoratedCollection(
+                            example.arrayValue!!.map { elem ->
+                                formatExample(
+                                    metadata,
+                                    elem,
+                                    depth + 1,
+                                    false
+                                )
+                            }
+                        )
+                }
+                FieldType.OBJECT -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
+                    it.objectValue = DecoratedCollection(
+                        example.objectValue!!.entries.sortedBy { e -> e.key }
+                            .map { (k, v) ->
+                                val type = v.typeName?.let { SimpleTypeLinkScope(it, metadata.getType(it).toLink()) }
+                                val contentType = v.contentTypeName?.let {
+                                    SimpleTypeLinkScope(
+                                        it,
+                                        metadata.getSpecificType(it, metadata.xmlContentTypes).toLink()
+                                    )
+                                }
+                                ObjectExampleEntryScope(
+                                    k,
+                                    formatExample(metadata, v, depth + 1, false),
+                                    type,
+                                    contentType
+                                )
+                            }
+                    )
+                }
+                FieldType.NULL -> ExampleEntryScope(depth, false, example.isTruncated).also { it.isNull = true }
+            }
+        )
+    }
 
     fun createExampleScope(
         metadata: me.bechberger.collector.xml.Metadata,
         example: Example
     ): ExampleScope {
-        return ExampleScope(metadata.getExampleName(example.exampleFile))
+        return ExampleScope(metadata.getExampleName(example.exampleFile), formatExample(metadata, example))
     }
 
     data class EventScope(
@@ -408,9 +514,23 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
         }
         return templating.template(
             "examples.html",
-            ExamplesScope(
-                DecoratedCollection(type.examples.map { metadata.getExampleName(it.exampleFile) }.distinct()),
-                type.examples.map { createExampleScope(metadata, it) }
+            Main.ExamplesScope(
+                type.name + type.javaClass.name.length,
+                DecoratedCollection(type.examples.map { createExampleScope(metadata, it) })
+            )
+        )
+    }
+
+    fun formatTypeExamples(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
+        if (type.examples.isEmpty()) {
+            return ""
+        }
+        return templating.template(
+            "type_examples.html",
+            TypeExamplesScope(
+                examples = formatExamples(metadata, type),
+                exampleSize = type.examples.size,
+                hasExamples = type.examples.size > 0
             )
         )
     }
@@ -431,9 +551,10 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
                     it.settings.find { event.name == "enabled" }?.let { it.value != "false" } ?: true
                 }.map { metadata.getConfigurationName(it.id) },
                 hasStartTime = event.startTime,
+                hasDuration = event.duration,
                 hasThread = event.thread,
                 hasStackTrace = event.stackTrace,
-                period = event.period?.name?.replace("_", " ")?.lowercase(),
+                period = event.period?.name?.replace("_", " ")?.lowercase()
             ),
             source = event.source,
             configurations = createConfigurationScope(metadata, event.configurations),
@@ -442,7 +563,7 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
             until = formatUntil(event.until),
             fields = formatFields(metadata, event),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
-            examples = formatExamples(metadata, event)
+            examples = formatTypeExamples(metadata, event)
         )
     }
 
@@ -514,13 +635,28 @@ class Main(val target: Path, val resourceFolder: Path? = null) {
 
     companion object {
         const val BOOTSTRAP_VERSION = "5.0.2"
+        val FILES_TO_DOWNLOAD = mapOf(
+            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js"
+                to "js/bootstrap-toc.js",
+            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css"
+                to "css/bootstrap-toc.css",
+            "https://cdn.jsdelivr.net/npm/jquery@3.6.1/dist/jquery.min.js" to "js/jquery.min.js",
+            "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js",
+            "https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" to
+                "js/bootstrap.bundle.min.js",
+            "https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" to "dist/css/bootstrap.min.css"
+        )
     }
 }
 
 fun main(args: Array<String>) {
-    if (args.size != 1) {
-        println("Usage: generator <target>")
+    if (args.isEmpty() || args.size > 2) {
+        println("Usage: generator <target> [<filename prefix>]")
         return
     }
-    Main(Path.of(args[0])).create()
+    if (args.size == 1) {
+        Main(Path.of(args[0])).create()
+    } else {
+        Main(Path.of(args[0]), fileNamePrefix = args[1]).create()
+    }
 }

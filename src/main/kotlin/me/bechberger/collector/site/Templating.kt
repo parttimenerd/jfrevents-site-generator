@@ -1,4 +1,4 @@
-package me.bechberger.collector.generator
+package me.bechberger.collector.site
 
 import com.github.mustachejava.DefaultMustacheFactory
 import com.github.mustachejava.Mustache
@@ -46,6 +46,7 @@ class Templating(val resourceFolder: Path? = null) {
     }
 
     fun copyFromResources(target: Path, resource: String) {
+        target.parent.toFile().mkdirs()
         if (resourceFolder == null) {
             val files: Enumeration<URL> =
                 Loader::class.java.classLoader.getResources(resource)

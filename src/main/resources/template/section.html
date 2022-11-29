@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+<div class="section mt-3 mb-5">
+    <h1>{{title}}</h1>
+    {{#entries}}
+
+        <h2 class="event-header">{{value.name}}</h2>
+        <div class="event">
+            {{{value.inner}}}
+        </div>
+    {{/entries}}
+</div>

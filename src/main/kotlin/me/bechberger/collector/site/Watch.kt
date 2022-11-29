@@ -1,4 +1,4 @@
-package me.bechberger.collector.generator
+package me.bechberger.collector.site
 
 import java.nio.file.Path
 
