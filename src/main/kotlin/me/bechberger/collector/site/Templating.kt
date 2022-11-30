@@ -10,7 +10,7 @@ import java.nio.file.Path
 import java.util.Enumeration
 import me.bechberger.collector.xml.Loader
 
-class Templating(val resourceFolder: Path? = null) {
+class Templating(private val resourceFolder: Path? = null) {
 
     val mf: MustacheFactory = DefaultMustacheFactory()
 

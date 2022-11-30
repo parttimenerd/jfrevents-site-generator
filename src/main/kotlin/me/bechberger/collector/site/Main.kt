@@ -199,10 +199,10 @@ class Main(
     fun createFieldScope(
         metadata: me.bechberger.collector.xml.Metadata,
         field: me.bechberger.collector.xml.Field
-    ): Main.FieldScope {
+    ): FieldScope {
         val descriptionAndLabelLength =
             field.label.length + (field.description?.length ?: 0) + (field.additionalDescription?.length ?: 0)
-        return Main.FieldScope(
+        return FieldScope(
             field.name,
             createTypeDescriptorScope(metadata, field.type),
             field.contentType?.let { createContentTypeDescriptorScope(metadata, it) },
@@ -230,7 +230,7 @@ class Main(
 
     fun createTypeTableScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        type: me.bechberger.collector.xml.XmlType
+        type: XmlType
     ): TypesTableScope {
         return TypesTableScope(
             type.parameterType,
@@ -378,11 +378,11 @@ class Main(
                     it.objectValue = DecoratedCollection(
                         example.objectValue!!.entries.sortedBy { e -> e.key }
                             .map { (k, v) ->
-                                val type = v.typeName?.let { SimpleTypeLinkScope(it, metadata.getType(it).toLink()) }
-                                val contentType = v.contentTypeName?.let {
+                                val type = v.typeName?.let { t -> SimpleTypeLinkScope(t, metadata.getType(t).toLink()) }
+                                val contentType = v.contentTypeName?.let { c ->
                                     SimpleTypeLinkScope(
-                                        it,
-                                        metadata.getSpecificType(it, metadata.xmlContentTypes).toLink()
+                                        c,
+                                        metadata.getSpecificType(c, metadata.xmlContentTypes).toLink()
                                     )
                                 }
                                 ObjectExampleEntryScope(
@@ -512,7 +512,7 @@ class Main(
         }
         return templating.template(
             "examples.html",
-            Main.ExamplesScope(
+            ExamplesScope(
                 type.name + type.javaClass.name.length,
                 DecoratedCollection(type.examples.map { createExampleScope(metadata, it) })
             )
@@ -600,7 +600,7 @@ class Main(
         )
     }
 
-    fun body(metadata: me.bechberger.collector.xml.Metadata, infoScope: Main.InfoScope): List<String> {
+    fun body(metadata: me.bechberger.collector.xml.Metadata, infoScope: InfoScope): List<String> {
         val sections: MutableList<String> = mutableListOf(templating.template("intro.html", infoScope))
         sections.addAll(
             groupEventsByTopLevelCategory(metadata).map { (title, events) ->
