@@ -3,12 +3,12 @@ package me.bechberger.collector.site
 import com.github.mustachejava.DefaultMustacheFactory
 import com.github.mustachejava.Mustache
 import com.github.mustachejava.MustacheFactory
-import me.bechberger.collector.xml.Loader
 import java.io.StringReader
 import java.io.StringWriter
 import java.net.URL
 import java.nio.file.Path
 import java.util.Enumeration
+import me.bechberger.collector.xml.Loader
 
 class Templating(val resourceFolder: Path? = null) {
 

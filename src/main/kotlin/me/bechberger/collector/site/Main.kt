@@ -92,8 +92,7 @@ class Main(
 
     fun createPage(version: Int) {
         val metadata = Loader.loadVersion(version)
-        val examples = metadata.events.count { it.examples.isNotEmpty() }
-        println("${metadata.events.size} events ($examples have examples)")
+        println("${metadata.events.size} events (${metadata.events.count { it.examples.isNotEmpty() }} have examples)")
         val infoScope = InfoScope(
             version,
             version == versions.last(),
@@ -337,7 +336,7 @@ class Main(
         val key: String,
         val value: String,
         val type: SimpleTypeLinkScope? = null,
-        val comtentType: SimpleTypeLinkScope? = null
+        val contentType: SimpleTypeLinkScope? = null
     )
 
     data class ExampleEntryScope(
@@ -451,7 +450,6 @@ class Main(
     fun groupEventsByTopLevelCategory(metadata: me.bechberger.collector.xml.Metadata): List<Pair<String, List<Event>>> {
         val sections = metadata.events.groupBy { it.topLevelCategory() }
         return sections.map { (section, events) ->
-            println(section)
             section to events
         }.sortedBy { it.first }
     }

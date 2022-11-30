@@ -21,6 +21,7 @@ fun main(args: Array<String>) {
         if (newMap != map) {
             println("Change detected")
             create(target)
+            println("Create page for JDK $target")
             map = newMap
         }
         Thread.sleep(100)
