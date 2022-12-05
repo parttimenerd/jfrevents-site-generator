@@ -15,6 +15,7 @@
                 {{#type.link}}<a href="{{{type.link}}}" class="popover-on type-link" data-content="{{type.label}}">{{type.name}}</a>{{/type.link}}{{^type.link}}{{type.name}}{{/type.link}}{{#contentType}}: {{#contentType.link}}<a href="{{{contentType.link}}}" class="popover-on type-link" data-content="{{contentType.label}}">{{contentType.name}}</a>{{/contentType.link}}
                 {{/contentType}}
                 {{#struct}} <span class="badge bg-info">struct</span>{{/struct}}
+                {{{jdkBadges}}}
             </td>
             <td>
                 {{#label}}<span class="field-label">{{.}}</span>{{/label}} {{#description}}<span class="field-description">{{{.}}}</span>{{/description}} {{#additionalDescription}}<span class="field-description">{{{.}}}</span>{{/additionalDescription}} {{#descriptionMissing}}

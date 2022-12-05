@@ -13,6 +13,7 @@ import sys
 os.chdir(Path(__file__).parent.parent)
 
 SAPMACHINE_FOLDER = "/tmp/sapmachine-gh-pages-clone"
+os.makedirs(SAPMACHINE_FOLDER, exist_ok=True)
 SITE_FOLDER = "site"
 
 
@@ -22,8 +23,8 @@ def clean():
 
 
 def clean_gen():
-    shutil.rmtree("target")
-    shutil.rmtree(SITE_FOLDER)
+    shutil.rmtree("target", ignore_errors=True)
+    shutil.rmtree(SITE_FOLDER, ignore_errors=True)
 
 
 def clone():

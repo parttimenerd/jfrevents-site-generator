@@ -33,12 +33,7 @@
   {{#period}}
   <span class="badge bg-success period-badge">{{.}}</span>
   {{/period}}
-  {{#since}}
-  <span class="badge bg-warning">JDK {{.}}+</span>
-  {{/since}}
-  {{#until}}
-  <span class="badge bg-danger">until JDK {{.}}</span>
-  {{/until}}
+  {{{jdkBadges}}}
   {{/flags}}
 </p>
 {{#source}}
@@ -83,7 +78,7 @@
   <tr>
     <th scope="row">{{name}}</th>
     {{#cells}}
-    <td>{{.}}</td>
+    <td>{{{.}}}</td>
     {{/cells}}
   </tr>
   {{/rows}}

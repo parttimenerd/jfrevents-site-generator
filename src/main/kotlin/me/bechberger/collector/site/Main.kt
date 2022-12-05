@@ -6,7 +6,6 @@ import me.bechberger.collector.xml.Event
 import me.bechberger.collector.xml.Example
 import me.bechberger.collector.xml.FieldType
 import me.bechberger.collector.xml.Loader
-import me.bechberger.collector.xml.SingleEventConfiguration
 import me.bechberger.collector.xml.Type
 import me.bechberger.collector.xml.XmlContentType
 import me.bechberger.collector.xml.XmlType
@@ -31,6 +30,9 @@ class Main(
             if (fileNamePrefix != "") "$fileNamePrefix.html" else "index.html"
         }
     }
+
+    /** LTS, last and current, the only versions that anyone would work with */
+    val relevantVersions = versions.filter { it in setOf(11, 17, 21, 25, versions.last(), versions.last() - 1) }
     val templating: Templating = Templating(resourceFolder)
 
     init {
@@ -56,8 +58,7 @@ class Main(
     private fun downloadBootstrapIfNeeded() {
         if (!target.resolve("bootstrap").exists()) {
             URL(
-                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" +
-                    "bootstrap-$BOOTSTRAP_VERSION-dist.zip"
+                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" + "bootstrap-$BOOTSTRAP_VERSION-dist.zip"
             ).openStream().use { stream ->
                 target.resolve("bootstrap.zip").toFile().outputStream().use {
                     it.write(stream.readBytes())
@@ -76,7 +77,50 @@ class Main(
         }
     }
 
-    data class InfoScope(
+    inner class SupportedRelevantJDKScope(val version: Int, val file: String) {
+        constructor(version: Int) : this(version, versionToFileName[version]!!)
+    }
+
+    data class SupportedRelevantJDKsScope(
+        val versions: List<SupportedRelevantJDKScope>,
+        val removedIn: SupportedRelevantJDKScope?,
+        /** X is in all relevant JDKs <since>+ */
+        val since: SupportedRelevantJDKScope?
+    )
+
+    fun List<Int>.isSubList(other: List<Int>) = other.isNotEmpty() && subList(indexOf(other.first()), size) == other
+
+    fun List<Int>.toSupportedRelevantJDKScopes(shorten: Boolean): SupportedRelevantJDKsScope {
+        val relVersions = filter { it in relevantVersions }
+        val relevantSinceVersion = if (relevantVersions.isSubList(relVersions)) relVersions.first() else null
+        val sinceVersion = if (versions.isSubList(this)) first() else relevantSinceVersion
+        val supportedRelevantJDKsScope = SupportedRelevantJDKsScope(
+            (
+                (if (sinceVersion != null && sinceVersion != relVersions.first()) listOf(sinceVersion) else listOf()) +
+                    relVersions
+                ).map {
+                SupportedRelevantJDKScope(
+                    it
+                )
+            },
+            if (last() != versions.last()) SupportedRelevantJDKScope(
+                last() + 1,
+                versionToFileName[last() + 1]!!
+            ) else null,
+            if (shorten && sinceVersion != null) {
+                SupportedRelevantJDKScope(sinceVersion)
+            } else null
+        )
+        return supportedRelevantJDKsScope
+    }
+
+    fun formatJDKBadges(jdks: List<Int>, shorten: Boolean) =
+        if (!shorten || !relevantVersions.all { it in jdks }) templating.template(
+            "jdk_badges.html",
+            jdks.toSupportedRelevantJDKScopes(shorten)
+        ) else ""
+
+    class InfoScope(
         val version: Int,
         val isCurrent: Boolean,
         val year: Int,
@@ -88,7 +132,13 @@ class Main(
         val inner: List<String>
     )
 
-    data class VersionToFile(val version: Int, val fileName: String, val isCurrent: Boolean, val isBeta: Boolean)
+    data class VersionToFile(
+        val version: Int,
+        val fileName: String,
+        val isCurrent: Boolean,
+        val isBeta: Boolean,
+        val isRelevant: Boolean
+    )
 
     fun createPage(version: Int) {
         val metadata = Loader.loadVersion(version)
@@ -102,7 +152,8 @@ class Main(
                     it.key,
                     it.value,
                     it.key == version,
-                    it.key == versions.last() - 1
+                    it.key == versions.last() - 1,
+                    relevantVersions.contains(it.key)
                 )
             }.toTypedArray()
         )
@@ -148,8 +199,7 @@ class Main(
         val array: Boolean,
         val experimental: Boolean,
         val transition: String?,
-        val since: String?,
-        val until: String?,
+        val jdkBadges: String,
         val label: String,
         val description: String?,
         val additionalDescription: String?,
@@ -198,7 +248,8 @@ class Main(
 
     fun createFieldScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        field: me.bechberger.collector.xml.Field
+        field: me.bechberger.collector.xml.Field,
+        parent: Type<*>
     ): FieldScope {
         val descriptionAndLabelLength =
             field.label.length + (field.description?.length ?: 0) + (field.additionalDescription?.length ?: 0)
@@ -210,8 +261,7 @@ class Main(
             field.array,
             field.experimental,
             field.transition.toString().lowercase(),
-            formatSince(field.since),
-            formatUntil(field.until),
+            if (parent.jdks != field.jdks) formatJDKBadges(field.jdks, shorten = true) else "",
             field.label,
             field.description,
             field.additionalDescription,
@@ -249,8 +299,7 @@ class Main(
         val label: String,
         val additionalDescription: String?,
         val descriptionMissing: Boolean,
-        val since: String?,
-        val until: String?,
+        val jdkBadges: String,
         val fields: String?,
         val appearsIn: String,
         val examples: String,
@@ -273,8 +322,7 @@ class Main(
             type.label,
             type.additionalDescription,
             descriptionAndLabelLength - 4 < type.name.length && type.name[0].isUpperCase(),
-            formatSince(type.since),
-            formatUntil(type.until),
+            formatJDKBadges(type.jdks, shorten = true),
             if (type is Type<*>) formatFields(metadata, type) else null,
             formatAppearsIn(metadata, type),
             formatTypeExamples(metadata, type),
@@ -362,22 +410,21 @@ class Main(
                     it.stringValue = example.stringValue
                 }
                 FieldType.ARRAY -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
-                    it.arrayValue =
-                        DecoratedCollection(
-                            example.arrayValue!!.map { elem ->
-                                formatExample(
-                                    metadata,
-                                    elem,
-                                    depth + 1,
-                                    false
-                                )
-                            }
-                        )
+                    it.arrayValue = DecoratedCollection(
+                        example.arrayValue!!.map { elem ->
+                            formatExample(
+                                metadata,
+                                elem,
+                                depth + 1,
+                                false
+                            )
+                        }
+                    )
                 }
                 FieldType.OBJECT -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
-                    it.objectValue = DecoratedCollection(
-                        example.objectValue!!.entries.sortedBy { e -> e.key }
-                            .map { (k, v) ->
+                    it.objectValue =
+                        DecoratedCollection(
+                            example.objectValue!!.entries.sortedBy { e -> e.key }.map { (k, v) ->
                                 val type = v.typeName?.let { t -> SimpleTypeLinkScope(t, metadata.getType(t).toLink()) }
                                 val contentType = v.contentTypeName?.let { c ->
                                     SimpleTypeLinkScope(
@@ -392,7 +439,7 @@ class Main(
                                     contentType
                                 )
                             }
-                    )
+                        )
                 }
                 FieldType.NULL -> ExampleEntryScope(depth, false, example.isTruncated).also { it.isNull = true }
             }
@@ -414,8 +461,7 @@ class Main(
         val flags: Flags,
         val source: String?,
         val configurations: ConfigurationScope?,
-        val since: String?,
-        val until: String?,
+        val jdkBadges: String,
         val fields: String,
         val descriptionMissing: Boolean,
         val appearsIn: String,
@@ -468,8 +514,9 @@ class Main(
 
     fun createConfigurationScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        configs: List<SingleEventConfiguration>
+        event: Event
     ): ConfigurationScope? {
+        val configs = event.configurations
         if (configs.isEmpty()) {
             return null
         }
@@ -479,21 +526,26 @@ class Main(
             configEntryNames.last(),
             configs.map { config ->
                 ConfigurationRowScope(
-                    metadata.getConfigurationName(config.id),
+                    metadata.getConfigurationName(config.id) + " " + (
+                        if (config.jdks != event.jdks) formatJDKBadges(
+                            config.jdks,
+                            shorten = true
+                        ) else ""
+                        ),
                     configEntryNames.map { name ->
-                        config.settings.find { it.name == name }?.value ?: ""
+                        config.settings.find { it.name == name }
+                            ?.let {
+                                it.value + " " + (
+                                    if (it.jdks != config.jdks) formatJDKBadges(
+                                        it.jdks,
+                                        shorten = true
+                                    ) else ""
+                                    )
+                            } ?: ""
                     }
                 )
             }
         )
-    }
-
-    fun formatSince(since: Int?): String {
-        return since?.let { if (it == versions.first()) "" else "$it" } ?: ""
-    }
-
-    fun formatUntil(until: Int?): String {
-        return until?.let { if (it == versions.last()) "" else "$it" } ?: ""
     }
 
     fun formatFields(metadata: me.bechberger.collector.xml.Metadata, type: Type<*>): String {
@@ -502,7 +554,7 @@ class Main(
         }
         return templating.template(
             "fields.html",
-            mutableMapOf("fields" to type.fields.map { createFieldScope(metadata, it) })
+            mutableMapOf("fields" to type.fields.map { createFieldScope(metadata, it, type) })
         )
     }
 
@@ -555,10 +607,9 @@ class Main(
                 period = event.period?.name?.replace("_", " ")?.lowercase()
             ),
             source = event.source,
-            configurations = createConfigurationScope(metadata, event.configurations),
+            configurations = createConfigurationScope(metadata, event),
             appearsIn = formatAppearsIn(metadata, event),
-            since = formatSince(event.since),
-            until = formatUntil(event.until),
+            jdkBadges = formatJDKBadges(event.jdks, shorten = false),
             fields = formatFields(metadata, event),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
             examples = formatTypeExamples(metadata, event)
@@ -634,15 +685,10 @@ class Main(
     companion object {
         const val BOOTSTRAP_VERSION = "5.0.2"
         val FILES_TO_DOWNLOAD = mapOf(
-            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js"
-                to "js/bootstrap-toc.js",
-            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css"
-                to "css/bootstrap-toc.css",
+            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js" to "js/bootstrap-toc.js",
+            "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css" to "css/bootstrap-toc.css",
             "https://cdn.jsdelivr.net/npm/jquery@3.6.1/dist/jquery.min.js" to "js/jquery.min.js",
-            "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js",
-            "https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" to
-                "bootstrap/js/bootstrap.bundle.min.js",
-            "https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" to "dist/css/bootstrap.min.css"
+            "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js"
         )
     }
 }

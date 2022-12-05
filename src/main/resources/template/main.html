@@ -8,8 +8,8 @@
     <meta name="generator" content="jfrevents-site-generator">
     <title>JFR Event Collection for JDK {{info.version}}</title>
 
-    <link href="dist/css/bootstrap.min.css" rel="stylesheet" >
-    <script src="js/bootstrap.bundle.min.js"></script>
+    <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" >
+    <script src="bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/anchor.min.js"></script>
 
 
@@ -37,7 +37,7 @@
                     {{#info}}
                         {{#versions}}
                         <li class="nav-item">
-                            <a class="nav-link {{#isCurrent}}active{{/isCurrent}}" aria-current="page" href="{{fileName}}"><span class="jdk-label">JDK</span> {{version}}</a>
+                            <a class="nav-link {{#isCurrent}}active{{/isCurrent}} {{#isRelevant}}relevant{{/isRelevant}}" aria-current="page" href="{{fileName}}"><span class="jdk-label">JDK</span> {{version}}</a>
                         </li>
                         {{/versions}}
                     {{/info}}
@@ -107,6 +107,12 @@ $('.period-badge').popover({
 });
 $(".popover-on").tooltip({ trigger: 'hover', placement: 'top' });
 new bootstrap.ScrollSpy(document.body, {target: '#toc'});
+$("details").each(function (i, el) {
+    el.addEventListener("toggle", function (e) {
+        if (e.target.open && e.target.tabAlready !== true) {
+            new bootstrap.Tab(e.target.querySelector('div').id);        }
+    });
+});
 });
 anchors.add();
 </script>
