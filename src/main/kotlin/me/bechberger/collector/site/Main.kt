@@ -13,6 +13,7 @@ import java.net.URL
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.TreeMap
+import org.eclipse.jdt.internal.compiler.parser.Parser.name
 import kotlin.io.path.exists
 
 /**
@@ -597,8 +598,8 @@ class Main(
                 isInternal = event.internal,
                 throttle = event.throttle,
                 cutoff = event.cutoff,
-                event.configurations.filter {
-                    it.settings.find { event.name == "enabled" }?.let { it.value != "false" } ?: true
+                enabledInConfigs = event.configurations.filter { conf ->
+                    conf.settings.find { it.name == "enabled" }?.let { it.value != "false" } ?: true
                 }.map { metadata.getConfigurationName(it.id) },
                 hasStartTime = event.startTime,
                 hasDuration = event.duration,
