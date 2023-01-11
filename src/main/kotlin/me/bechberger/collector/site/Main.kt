@@ -684,11 +684,11 @@ class Main(
     }
 
     companion object {
-        const val BOOTSTRAP_VERSION = "5.0.2"
+        const val BOOTSTRAP_VERSION = "5.2.3"
         val FILES_TO_DOWNLOAD = mapOf(
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js" to "js/bootstrap-toc.js",
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css" to "css/bootstrap-toc.css",
-            "https://cdn.jsdelivr.net/npm/jquery@3.6.1/dist/jquery.min.js" to "js/jquery.min.js",
+            "https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js" to "js/jquery.min.js",
             "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js"
         )
     }
