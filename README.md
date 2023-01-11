@@ -22,6 +22,8 @@ Development
 
 `bin/publish.sh` is used to publish the site at [sapmachine.io](https://sapmachine.io).
 
+Use `bin/publish.sh all` to create and publish the site.
+
 License
 -------
 GPLv2
