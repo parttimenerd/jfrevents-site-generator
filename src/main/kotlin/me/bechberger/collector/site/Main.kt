@@ -12,6 +12,8 @@ import me.bechberger.collector.xml.XmlType
 import java.net.URL
 import java.nio.file.Path
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.TreeMap
 import org.eclipse.jdt.internal.compiler.parser.Parser.name
 import kotlin.io.path.exists
@@ -125,7 +127,9 @@ class Main(
         val version: Int,
         val isCurrent: Boolean,
         val year: Int,
-        val versions: Array<VersionToFile>
+        val versions: Array<VersionToFile>,
+        val tag: String,
+        val date: String
     )
 
     data class MainScope(
@@ -156,7 +160,10 @@ class Main(
                     it.key == versions.last() - 1,
                     relevantVersions.contains(it.key)
                 )
-            }.toTypedArray()
+            }.toTypedArray(),
+            Loader.getSpecificVersion(version),
+            LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy"))
         )
         val html = templating.template(
             "main.html",
