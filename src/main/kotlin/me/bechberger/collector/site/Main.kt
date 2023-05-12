@@ -9,13 +9,13 @@ import me.bechberger.collector.xml.Loader
 import me.bechberger.collector.xml.Type
 import me.bechberger.collector.xml.XmlContentType
 import me.bechberger.collector.xml.XmlType
+import org.eclipse.jdt.internal.compiler.parser.Parser.name
 import java.net.URL
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.TreeMap
-import org.eclipse.jdt.internal.compiler.parser.Parser.name
 import kotlin.io.path.exists
 
 /**
@@ -24,12 +24,14 @@ import kotlin.io.path.exists
 class Main(
     val target: Path,
     val resourceFolder: Path? = null,
-    val fileNamePrefix: String = ""
+    val fileNamePrefix: String = "",
 ) {
 
     val versions = Loader.getVersions()
     val versionToFileName = versions.associateWithTo(TreeMap<Int, String>()) {
-        if (it != versions.last() - 1) "$fileNamePrefix$it.html" else {
+        if (it != versions.last() - 1) {
+            "$fileNamePrefix$it.html"
+        } else {
             if (fileNamePrefix != "") "$fileNamePrefix.html" else "index.html"
         }
     }
@@ -61,7 +63,7 @@ class Main(
     private fun downloadBootstrapIfNeeded() {
         if (!target.resolve("bootstrap").exists()) {
             URL(
-                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" + "bootstrap-$BOOTSTRAP_VERSION-dist.zip"
+                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" + "bootstrap-$BOOTSTRAP_VERSION-dist.zip",
             ).openStream().use { stream ->
                 target.resolve("bootstrap.zip").toFile().outputStream().use {
                     it.write(stream.readBytes())
@@ -72,8 +74,8 @@ class Main(
                     "unzip",
                     target.resolve("bootstrap.zip").toString(),
                     "-d",
-                    target.toString()
-                )
+                    target.toString(),
+                ),
             ).waitFor()
             target.resolve("bootstrap-$BOOTSTRAP_VERSION-dist").toFile().renameTo(target.resolve("bootstrap").toFile())
             target.resolve("bootstrap.zip").toFile().delete()
@@ -88,7 +90,7 @@ class Main(
         val versions: List<SupportedRelevantJDKScope>,
         val removedIn: SupportedRelevantJDKScope?,
         /** X is in all relevant JDKs <since>+ */
-        val since: SupportedRelevantJDKScope?
+        val since: SupportedRelevantJDKScope?,
     )
 
     fun List<Int>.isSubList(other: List<Int>) = other.isNotEmpty() && subList(indexOf(other.first()), size) == other
@@ -103,25 +105,35 @@ class Main(
                     relVersions
                 ).map {
                 SupportedRelevantJDKScope(
-                    it
+                    it,
                 )
             },
-            if (last() != versions.last()) SupportedRelevantJDKScope(
-                last() + 1,
-                versionToFileName[last() + 1]!!
-            ) else null,
+            if (last() != versions.last()) {
+                SupportedRelevantJDKScope(
+                    last() + 1,
+                    versionToFileName[last() + 1]!!,
+                )
+            } else {
+                null
+            },
             if (shorten && sinceVersion != null) {
                 SupportedRelevantJDKScope(sinceVersion)
-            } else null
+            } else {
+                null
+            },
         )
         return supportedRelevantJDKsScope
     }
 
     fun formatJDKBadges(jdks: List<Int>, shorten: Boolean) =
-        if (!shorten || !relevantVersions.all { it in jdks }) templating.template(
-            "jdk_badges.html",
-            jdks.toSupportedRelevantJDKScopes(shorten)
-        ) else ""
+        if (!shorten || !relevantVersions.all { it in jdks }) {
+            templating.template(
+                "jdk_badges.html",
+                jdks.toSupportedRelevantJDKScopes(shorten),
+            )
+        } else {
+            ""
+        }
 
     class InfoScope(
         val version: Int,
@@ -129,12 +141,12 @@ class Main(
         val year: Int,
         val versions: Array<VersionToFile>,
         val tag: String,
-        val date: String
+        val date: String,
     )
 
     data class MainScope(
         val info: InfoScope,
-        val inner: List<String>
+        val inner: List<String>,
     )
 
     data class VersionToFile(
@@ -142,7 +154,7 @@ class Main(
         val fileName: String,
         val isCurrent: Boolean,
         val isBeta: Boolean,
-        val isRelevant: Boolean
+        val isRelevant: Boolean,
     )
 
     fun createPage(version: Int) {
@@ -158,19 +170,19 @@ class Main(
                     it.value,
                     it.key == version,
                     it.key == versions.last() - 1,
-                    relevantVersions.contains(it.key)
+                    relevantVersions.contains(it.key),
                 )
             }.toTypedArray(),
             Loader.getSpecificVersion(version),
             LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy"))
+                .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy")),
         )
         val html = templating.template(
             "main.html",
             MainScope(
                 infoScope,
-                body(metadata, infoScope)
-            )
+                body(metadata, infoScope),
+            ),
         )
         target.resolve(versionToFileName[version]!!).toFile().writeText(html)
     }
@@ -194,7 +206,7 @@ class Main(
         val hasDuration: Boolean,
         val hasStackTrace: Boolean,
         val hasThread: Boolean,
-        val period: String?
+        val period: String?,
     )
 
     data class TypeDescriptorScope(val name: String, val description: String? = null, val link: String? = null)
@@ -211,7 +223,7 @@ class Main(
         val label: String,
         val description: String?,
         val additionalDescription: String?,
-        val descriptionMissing: Boolean
+        val descriptionMissing: Boolean,
     )
 
     fun AbstractType<*>?.toLink(): String? {
@@ -230,26 +242,26 @@ class Main(
         return (
             metadata.getSpecificType(type, metadata.types) ?: metadata.getSpecificType(
                 type,
-                metadata.xmlTypes
+                metadata.xmlTypes,
             )
             )?.let {
             TypeDescriptorScope(
                 it.name,
                 null,
-                it.toLink()
+                it.toLink(),
             )
         } ?: TypeDescriptorScope(type)
     }
 
     fun createContentTypeDescriptorScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        type: String
+        type: String,
     ): TypeDescriptorScope? {
         return metadata.getSpecificType(type, metadata.xmlContentTypes)?.let {
             TypeDescriptorScope(
                 it.name,
                 null,
-                it.toLink()
+                it.toLink(),
             )
         }
     }
@@ -257,7 +269,7 @@ class Main(
     fun createFieldScope(
         metadata: me.bechberger.collector.xml.Metadata,
         field: me.bechberger.collector.xml.Field,
-        parent: Type<*>
+        parent: Type<*>,
     ): FieldScope {
         val descriptionAndLabelLength =
             field.label.length + (field.description?.length ?: 0) + (field.additionalDescription?.length ?: 0)
@@ -273,7 +285,7 @@ class Main(
             field.label,
             field.description,
             field.additionalDescription,
-            descriptionAndLabelLength - 4 < field.name.length && field.type[0].isUpperCase()
+            descriptionAndLabelLength - 4 < field.name.length && field.type[0].isUpperCase(),
         )
     }
 
@@ -283,12 +295,12 @@ class Main(
         val fieldType: String = "",
         val javaType: String = "",
         val contentType: String = "",
-        val contentTypeLink: String = ""
+        val contentTypeLink: String = "",
     )
 
     fun createTypeTableScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        type: XmlType
+        type: XmlType,
     ): TypesTableScope {
         return TypesTableScope(
             type.parameterType,
@@ -297,7 +309,7 @@ class Main(
             type.contentType ?: "",
             type.contentType?.let { contentType ->
                 metadata.getSpecificType(contentType, metadata.xmlContentTypes).toLink()
-            } ?: ""
+            } ?: "",
         )
     }
 
@@ -313,13 +325,13 @@ class Main(
         val examples: String,
         val typesTable: String?,
         val unsigned: Boolean,
-        val annotation: String?
+        val annotation: String?,
     )
 
     fun formatTypesTable(metadata: me.bechberger.collector.xml.Metadata, type: XmlType): String {
         return templating.template(
             "types_table.html",
-            createTypeTableScope(metadata, type)
+            createTypeTableScope(metadata, type),
         )
     }
 
@@ -336,21 +348,21 @@ class Main(
             formatTypeExamples(metadata, type),
             if (type is XmlType) formatTypesTable(metadata, type) else null,
             type is XmlType && (type.unsigned ?: false),
-            if (type is XmlContentType) type.annotation else null
+            if (type is XmlContentType) type.annotation else null,
         )
     }
 
     fun formatType(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
         return templating.template(
             "type.html",
-            createTypeScope(metadata, type)
+            createTypeScope(metadata, type),
         )
     }
 
     data class AppearsInScope(
         val appearsIn: DecoratedCollection<String>,
         val missesIn: DecoratedCollection<String>,
-        val show: Boolean
+        val show: Boolean,
     )
 
     fun createAppearsInScope(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): AppearsInScope {
@@ -359,12 +371,12 @@ class Main(
 
         return AppearsInScope(
             DecoratedCollection(
-                appearsIn.sorted()
+                appearsIn.sorted(),
             ),
             DecoratedCollection(
-                missesIn.sorted()
+                missesIn.sorted(),
             ),
-            show = missesIn.isNotEmpty() && appearsIn.isNotEmpty()
+            show = missesIn.isNotEmpty() && appearsIn.isNotEmpty(),
         )
     }
 
@@ -372,7 +384,7 @@ class Main(
         val appearsInScope = createAppearsInScope(metadata, type)
         return templating.template(
             "appears_in.html",
-            appearsInScope
+            appearsInScope,
         )
     }
 
@@ -383,7 +395,7 @@ class Main(
     data class TypeExamplesScope(
         val examples: String,
         val hasExamples: Boolean,
-        val exampleSize: Int
+        val exampleSize: Int,
     )
 
     data class SimpleTypeLinkScope(val name: String, val link: String? = null)
@@ -392,7 +404,7 @@ class Main(
         val key: String,
         val value: String,
         val type: SimpleTypeLinkScope? = null,
-        val contentType: SimpleTypeLinkScope? = null
+        val contentType: SimpleTypeLinkScope? = null,
     )
 
     data class ExampleEntryScope(
@@ -402,14 +414,14 @@ class Main(
         var isNull: Boolean = false,
         var stringValue: String? = null,
         var arrayValue: DecoratedCollection<String>? = null,
-        var objectValue: DecoratedCollection<ObjectExampleEntryScope>? = null
+        var objectValue: DecoratedCollection<ObjectExampleEntryScope>? = null,
     )
 
     fun formatExample(
         metadata: me.bechberger.collector.xml.Metadata,
         example: Example,
         depth: Int = 0,
-        firstComplex: Boolean = true
+        firstComplex: Boolean = true,
     ): String {
         return templating.template(
             "example_entry.html",
@@ -418,45 +430,54 @@ class Main(
                     it.stringValue = example.stringValue
                 }
                 FieldType.ARRAY -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
-                    it.arrayValue = DecoratedCollection(
-                        example.arrayValue!!.map { elem ->
-                            formatExample(
-                                metadata,
-                                elem,
-                                depth + 1,
-                                false
-                            )
-                        }
-                    )
+                    example.arrayValue?.let { array ->
+                        it.arrayValue = DecoratedCollection(
+                            array.map { elem ->
+                                formatExample(
+                                    metadata,
+                                    elem,
+                                    depth + 1,
+                                    false,
+                                )
+                            },
+                        )
+                    } ?: run {
+                        it.isNull = true
+                    }
                 }
                 FieldType.OBJECT -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
-                    it.objectValue =
-                        DecoratedCollection(
-                            example.objectValue!!.entries.sortedBy { e -> e.key }.map { (k, v) ->
-                                val type = v.typeName?.let { t -> SimpleTypeLinkScope(t, metadata.getType(t).toLink()) }
-                                val contentType = v.contentTypeName?.let { c ->
-                                    SimpleTypeLinkScope(
-                                        c,
-                                        metadata.getSpecificType(c, metadata.xmlContentTypes).toLink()
+                    example.objectValue?.let { obj ->
+                        it.objectValue =
+                            DecoratedCollection(
+                                obj.entries.sortedBy { e -> e.key }.map { (k, v) ->
+                                    val type =
+                                        v.typeName?.let { t -> SimpleTypeLinkScope(t, metadata.getType(t).toLink()) }
+                                    val contentType = v.contentTypeName?.let { c ->
+                                        SimpleTypeLinkScope(
+                                            c,
+                                            metadata.getSpecificType(c, metadata.xmlContentTypes).toLink(),
+                                        )
+                                    }
+                                    ObjectExampleEntryScope(
+                                        k,
+                                        formatExample(metadata, v, depth + 1, false),
+                                        type,
+                                        contentType,
                                     )
-                                }
-                                ObjectExampleEntryScope(
-                                    k,
-                                    formatExample(metadata, v, depth + 1, false),
-                                    type,
-                                    contentType
-                                )
-                            }
-                        )
+                                },
+                            )
+                    } ?: run {
+                        it.isNull = true
+                    }
                 }
                 FieldType.NULL -> ExampleEntryScope(depth, false, example.isTruncated).also { it.isNull = true }
-            }
+            },
         )
     }
 
     fun createExampleScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        example: Example
+        example: Example,
     ): ExampleScope {
         return ExampleScope(metadata.getExampleName(example.exampleFile), formatExample(metadata, example))
     }
@@ -473,13 +494,13 @@ class Main(
         val fields: String,
         val descriptionMissing: Boolean,
         val appearsIn: String,
-        val examples: String
+        val examples: String,
     )
 
     data class ConfigurationScope(
         val headers: List<String>,
         val lastHeader: String,
-        val rows: List<ConfigurationRowScope>
+        val rows: List<ConfigurationRowScope>,
     )
 
     data class ConfigurationRowScope(val name: String, val cells: List<String>)
@@ -522,7 +543,7 @@ class Main(
 
     fun createConfigurationScope(
         metadata: me.bechberger.collector.xml.Metadata,
-        event: Event
+        event: Event,
     ): ConfigurationScope? {
         val configs = event.configurations
         if (configs.isEmpty()) {
@@ -535,24 +556,32 @@ class Main(
             configs.map { config ->
                 ConfigurationRowScope(
                     metadata.getConfigurationName(config.id) + " " + (
-                        if (config.jdks != event.jdks) formatJDKBadges(
-                            config.jdks,
-                            shorten = true
-                        ) else ""
+                        if (config.jdks != event.jdks) {
+                            formatJDKBadges(
+                                config.jdks,
+                                shorten = true,
+                            )
+                        } else {
+                            ""
+                        }
                         ),
                     configEntryNames.map { name ->
                         config.settings.find { it.name == name }
                             ?.let {
                                 it.value + " " + (
-                                    if (it.jdks != config.jdks) formatJDKBadges(
-                                        it.jdks,
-                                        shorten = true
-                                    ) else ""
+                                    if (it.jdks != config.jdks) {
+                                        formatJDKBadges(
+                                            it.jdks,
+                                            shorten = true,
+                                        )
+                                    } else {
+                                        ""
+                                    }
                                     )
                             } ?: ""
-                    }
+                    },
                 )
-            }
+            },
         )
     }
 
@@ -562,7 +591,7 @@ class Main(
         }
         return templating.template(
             "fields.html",
-            mutableMapOf("fields" to type.fields.map { createFieldScope(metadata, it, type) })
+            mutableMapOf("fields" to type.fields.map { createFieldScope(metadata, it, type) }),
         )
     }
 
@@ -574,8 +603,8 @@ class Main(
             "examples.html",
             ExamplesScope(
                 type.name + type.javaClass.name.length,
-                DecoratedCollection(type.examples.map { createExampleScope(metadata, it) })
-            )
+                DecoratedCollection(type.examples.map { createExampleScope(metadata, it) }),
+            ),
         )
     }
 
@@ -588,8 +617,8 @@ class Main(
             TypeExamplesScope(
                 examples = formatExamples(metadata, type),
                 exampleSize = type.examples.size,
-                hasExamples = type.examples.size > 0
-            )
+                hasExamples = type.examples.size > 0,
+            ),
         )
     }
 
@@ -612,7 +641,7 @@ class Main(
                 hasDuration = event.duration,
                 hasThread = event.thread,
                 hasStackTrace = event.stackTrace,
-                period = event.period?.name?.replace("_", " ")?.lowercase()
+                period = event.period?.name?.replace("_", " ")?.lowercase(),
             ),
             source = event.source,
             configurations = createConfigurationScope(metadata, event),
@@ -620,7 +649,7 @@ class Main(
             jdkBadges = formatJDKBadges(event.jdks, shorten = false),
             fields = formatFields(metadata, event),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
-            examples = formatTypeExamples(metadata, event)
+            examples = formatTypeExamples(metadata, event),
         )
     }
 
@@ -632,30 +661,30 @@ class Main(
     fun createEventSection(
         metadata: me.bechberger.collector.xml.Metadata,
         title: String,
-        events: List<Event>
+        events: List<Event>,
     ): SectionScope {
         return SectionScope(
             title,
             DecoratedCollection(
                 events.map {
                     SectionEntryScope(it.name, formatEvent(metadata, it))
-                }
-            )
+                },
+            ),
         )
     }
 
     fun createTypeSection(
         metadata: me.bechberger.collector.xml.Metadata,
         title: String,
-        types: List<AbstractType<*>>
+        types: List<AbstractType<*>>,
     ): SectionScope {
         return SectionScope(
             title,
             DecoratedCollection(
                 types.sortedBy { it.name }.map {
                     SectionEntryScope(it.name, formatType(metadata, it))
-                }
-            )
+                },
+            ),
         )
     }
 
@@ -665,27 +694,27 @@ class Main(
             groupEventsByTopLevelCategory(metadata).map { (title, events) ->
                 templating.template(
                     "section.html",
-                    createEventSection(metadata, title, events)
+                    createEventSection(metadata, title, events),
                 )
-            }
+            },
         )
         sections.add(
             templating.template(
                 "section.html",
-                createTypeSection(metadata, "Types", metadata.types)
-            )
+                createTypeSection(metadata, "Types", metadata.types),
+            ),
         )
         sections.add(
             templating.template(
                 "section.html",
-                createTypeSection(metadata, "XML Content Types", metadata.xmlContentTypes)
-            )
+                createTypeSection(metadata, "XML Content Types", metadata.xmlContentTypes),
+            ),
         )
         sections.add(
             templating.template(
                 "section.html",
-                createTypeSection(metadata, "XML Types", metadata.xmlTypes)
-            )
+                createTypeSection(metadata, "XML Types", metadata.xmlTypes),
+            ),
         )
         return sections
     }
@@ -696,7 +725,7 @@ class Main(
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js" to "js/bootstrap-toc.js",
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css" to "css/bootstrap-toc.css",
             "https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js" to "js/jquery.min.js",
-            "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js"
+            "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js",
         )
     }
 }

@@ -63,7 +63,7 @@ def publish():
     cd {SAPMACHINE_FOLDER}
     git config user.name "JFR Events Bot"
     git config user.email "Johannes Bechberger <johannes.bechberger@sap.com>"
-    git add jfrevents 
+    git add jfrevents
     git commit -m "Update site"
     git pull --rebase
     git push origin gh-pages

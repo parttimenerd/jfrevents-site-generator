@@ -20,9 +20,9 @@ Development
 -----------
 `WatchKt` builds the version 19 of the site (currently `index.html`) every time the resources change.
 
-`bin/publish.sh` is used to publish the site at [sapmachine.io](https://sapmachine.io).
+`bin/publish.py` is used to publish the site at [sapmachine.io/jfrevents](https://sapmachine.io/jfrevents).
 
-Use `bin/publish.sh all` to create and publish the site.
+Use `bin/publish.py all` to create and publish the site.
 
 License
 -------
