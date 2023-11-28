@@ -585,13 +585,17 @@ class Main(
         )
     }
 
-    fun formatFields(metadata: me.bechberger.collector.xml.Metadata, type: Type<*>): String {
+    fun formatFields(metadata: me.bechberger.collector.xml.Metadata, type: Type<*>, showEndTimeField: Boolean = true): String {
         if (type.fields.isEmpty()) {
             return ""
         }
         return templating.template(
             "fields.html",
-            mutableMapOf("fields" to type.fields.map { createFieldScope(metadata, it, type) }),
+            mutableMapOf(
+                "fields" to type.fields
+                    .filter { it.name != "endTime" || showEndTimeField }
+                    .map { createFieldScope(metadata, it, type) },
+            ),
         )
     }
 
@@ -638,7 +642,7 @@ class Main(
                     conf.settings.find { it.name == "enabled" }?.let { it.value != "false" } ?: true
                 }.map { metadata.getConfigurationName(it.id) },
                 hasStartTime = event.startTime,
-                hasDuration = event.duration,
+                hasDuration = event.duration && !event.fakeDuration,
                 hasThread = event.thread,
                 hasStackTrace = event.stackTrace,
                 period = event.period?.name?.replace("_", " ")?.lowercase(),
@@ -647,7 +651,7 @@ class Main(
             configurations = createConfigurationScope(metadata, event),
             appearsIn = formatAppearsIn(metadata, event),
             jdkBadges = formatJDKBadges(event.jdks, shorten = false),
-            fields = formatFields(metadata, event),
+            fields = formatFields(metadata, event, event.duration && !event.fakeDuration),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
             examples = formatTypeExamples(metadata, event),
         )
