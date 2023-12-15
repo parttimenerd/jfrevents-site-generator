@@ -176,8 +176,8 @@ class Main(
                 )
             }.toTypedArray(),
             version.let {
-                val lastLTS = ltsVersions.filter { v -> v <= version }.max()
-                if (lastLTS == version || lastLTS == version - 1) {
+                val lastLTS = ltsVersions.filter { v -> v < version }.maxOrNull()
+                if (lastLTS == null || lastLTS == version - 1) {
                     null
                 } else {
                     lastLTS + 1
