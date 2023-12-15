@@ -1,6 +1,12 @@
 package me.bechberger.collector.site
 
 import com.github.mustachejava.util.DecoratedCollection
+import java.net.URL
+import java.nio.file.Path
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.TreeMap
 import me.bechberger.collector.xml.AbstractType
 import me.bechberger.collector.xml.Event
 import me.bechberger.collector.xml.Example
@@ -9,13 +15,6 @@ import me.bechberger.collector.xml.Loader
 import me.bechberger.collector.xml.Type
 import me.bechberger.collector.xml.XmlContentType
 import me.bechberger.collector.xml.XmlType
-import org.eclipse.jdt.internal.compiler.parser.Parser.name
-import java.net.URL
-import java.nio.file.Path
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.TreeMap
 import kotlin.io.path.exists
 
 /**
@@ -23,7 +22,7 @@ import kotlin.io.path.exists
  */
 class Main(
     val target: Path,
-    val resourceFolder: Path? = null,
+    resourceFolder: Path? = null,
     val fileNamePrefix: String = "",
 ) {
 
@@ -37,7 +36,8 @@ class Main(
     }
 
     /** LTS, last and current, the only versions that anyone would work with */
-    val relevantVersions = versions.filter { it in setOf(11, 17, 21, 25, versions.last(), versions.last() - 1) }
+    val ltsVersions = versions.filter { it in setOf(11, 17, 21, 25) }
+    val relevantVersions = ltsVersions + versions.filter { it in setOf(versions.last(), versions.last() - 1) }
     val templating: Templating = Templating(resourceFolder)
 
     init {
@@ -63,7 +63,8 @@ class Main(
     private fun downloadBootstrapIfNeeded() {
         if (!target.resolve("bootstrap").exists()) {
             URL(
-                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" + "bootstrap-$BOOTSTRAP_VERSION-dist.zip",
+                "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" +
+                        "bootstrap-$BOOTSTRAP_VERSION-dist.zip",
             ).openStream().use { stream ->
                 target.resolve("bootstrap.zip").toFile().outputStream().use {
                     it.write(stream.readBytes())
@@ -101,13 +102,13 @@ class Main(
         val sinceVersion = if (versions.isSubList(this)) first() else relevantSinceVersion
         val supportedRelevantJDKsScope = SupportedRelevantJDKsScope(
             (
-                (if (sinceVersion != null && sinceVersion != relVersions.first()) listOf(sinceVersion) else listOf()) +
-                    relVersions
-                ).map {
-                SupportedRelevantJDKScope(
-                    it,
-                )
-            },
+                    (if (sinceVersion != null && sinceVersion != relVersions.first()) listOf(sinceVersion) else listOf()) +
+                            relVersions
+                    ).map {
+                    SupportedRelevantJDKScope(
+                        it,
+                    )
+                },
             if (last() != versions.last()) {
                 SupportedRelevantJDKScope(
                     last() + 1,
@@ -140,6 +141,7 @@ class Main(
         val isCurrent: Boolean,
         val year: Int,
         val versions: Array<VersionToFile>,
+        val previousOneAfterLTS: Int?,
         val tag: String,
         val date: String,
     )
@@ -173,6 +175,14 @@ class Main(
                     relevantVersions.contains(it.key),
                 )
             }.toTypedArray(),
+            version.let {
+                val lastLTS = ltsVersions.filter { v -> v <= version }.max()
+                if (lastLTS == version || lastLTS == version - 1) {
+                    null
+                } else {
+                    lastLTS + 1
+                }
+            },
             Loader.getSpecificVersion(version),
             LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy")),
@@ -191,9 +201,9 @@ class Main(
         versions.forEach { createPage(it) }
     }
 
-    data class SectionEntryScope(val name: String, val inner: String)
+    data class SectionEntryScope(val name: String, val inner: String, val jdks: String)
 
-    data class SectionScope(val title: String, val entries: DecoratedCollection<SectionEntryScope>)
+    data class SectionScope(val title: String, val entries: DecoratedCollection<SectionEntryScope>, val jdks: String)
 
     data class Flags(
         val isEnabled: Boolean,
@@ -240,17 +250,17 @@ class Main(
     /** for XMLType and Type */
     fun createTypeDescriptorScope(metadata: me.bechberger.collector.xml.Metadata, type: String): TypeDescriptorScope {
         return (
-            metadata.getSpecificType(type, metadata.types) ?: metadata.getSpecificType(
-                type,
-                metadata.xmlTypes,
-            )
-            )?.let {
-            TypeDescriptorScope(
-                it.name,
-                null,
-                it.toLink(),
-            )
-        } ?: TypeDescriptorScope(type)
+                metadata.getSpecificType(type, metadata.types) ?: metadata.getSpecificType(
+                    type,
+                    metadata.xmlTypes,
+                )
+                )?.let {
+                TypeDescriptorScope(
+                    it.name,
+                    null,
+                    it.toLink(),
+                )
+            } ?: TypeDescriptorScope(type)
     }
 
     fun createContentTypeDescriptorScope(
@@ -429,6 +439,7 @@ class Main(
                 FieldType.STRING -> ExampleEntryScope(depth, false, example.isTruncated).also {
                     it.stringValue = example.stringValue
                 }
+
                 FieldType.ARRAY -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
                     example.arrayValue?.let { array ->
                         it.arrayValue = DecoratedCollection(
@@ -445,6 +456,7 @@ class Main(
                         it.isNull = true
                     }
                 }
+
                 FieldType.OBJECT -> ExampleEntryScope(depth, firstComplex, example.isTruncated).also {
                     example.objectValue?.let { obj ->
                         it.objectValue =
@@ -470,6 +482,7 @@ class Main(
                         it.isNull = true
                     }
                 }
+
                 FieldType.NULL -> ExampleEntryScope(depth, false, example.isTruncated).also { it.isNull = true }
             },
         )
@@ -491,6 +504,7 @@ class Main(
         val source: String?,
         val configurations: ConfigurationScope?,
         val jdkBadges: String,
+        val allJDKs: List<Int>,
         val fields: String,
         val descriptionMissing: Boolean,
         val appearsIn: String,
@@ -556,28 +570,28 @@ class Main(
             configs.map { config ->
                 ConfigurationRowScope(
                     metadata.getConfigurationName(config.id) + " " + (
-                        if (config.jdks != event.jdks) {
-                            formatJDKBadges(
-                                config.jdks,
-                                shorten = true,
-                            )
-                        } else {
-                            ""
-                        }
-                        ),
+                            if (config.jdks != event.jdks) {
+                                formatJDKBadges(
+                                    config.jdks,
+                                    shorten = true,
+                                )
+                            } else {
+                                ""
+                            }
+                            ),
                     configEntryNames.map { name ->
                         config.settings.find { it.name == name }
                             ?.let {
                                 it.value + " " + (
-                                    if (it.jdks != config.jdks) {
-                                        formatJDKBadges(
-                                            it.jdks,
-                                            shorten = true,
+                                        if (it.jdks != config.jdks) {
+                                            formatJDKBadges(
+                                                it.jdks,
+                                                shorten = true,
+                                            )
+                                        } else {
+                                            ""
+                                        }
                                         )
-                                    } else {
-                                        ""
-                                    }
-                                    )
                             } ?: ""
                     },
                 )
@@ -585,7 +599,11 @@ class Main(
         )
     }
 
-    fun formatFields(metadata: me.bechberger.collector.xml.Metadata, type: Type<*>, showEndTimeField: Boolean = true): String {
+    fun formatFields(
+        metadata: me.bechberger.collector.xml.Metadata,
+        type: Type<*>,
+        showEndTimeField: Boolean = true
+    ): String {
         if (type.fields.isEmpty()) {
             return ""
         }
@@ -651,6 +669,7 @@ class Main(
             configurations = createConfigurationScope(metadata, event),
             appearsIn = formatAppearsIn(metadata, event),
             jdkBadges = formatJDKBadges(event.jdks, shorten = false),
+            allJDKs = event.jdks,
             fields = formatFields(metadata, event, event.duration && !event.fakeDuration),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
             examples = formatTypeExamples(metadata, event),
@@ -662,6 +681,10 @@ class Main(
         return templating.template("event.html", eventScope)
     }
 
+    fun formatJDKList(jdks: List<Int>): String {
+        return jdks.joinToString(", ")
+    }
+
     fun createEventSection(
         metadata: me.bechberger.collector.xml.Metadata,
         title: String,
@@ -671,9 +694,10 @@ class Main(
             title,
             DecoratedCollection(
                 events.map {
-                    SectionEntryScope(it.name, formatEvent(metadata, it))
+                    SectionEntryScope(it.name, formatEvent(metadata, it), formatJDKList(it.jdks))
                 },
             ),
+            formatJDKList(listOf(events.map { it.jdks.min() }.max())),
         )
     }
 
@@ -686,9 +710,10 @@ class Main(
             title,
             DecoratedCollection(
                 types.sortedBy { it.name }.map {
-                    SectionEntryScope(it.name, formatType(metadata, it))
+                    SectionEntryScope(it.name, formatType(metadata, it), formatJDKList(it.jdks))
                 },
             ),
+            formatJDKList(listOf(types.map { it.jdks.min() }.max())),
         )
     }
 

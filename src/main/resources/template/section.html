@@ -1,9 +1,9 @@
-<div class="section mt-3 mb-5">
-    <h1>{{title}}</h1>
+<div class="section mt-3 mb-5 hideable-part" data-jdks="{{jdks}}">
+    <h1 class="section-header" data-jdks="{{jdks}}">{{title}}</h1>
     {{#entries}}
 
-        <h2 class="event-header">{{value.name}}</h2>
-        <div class="event">
+        <h2 class="event-header hideable-part" data-jdks="{{value.jdks}}">{{value.name}}</h2>
+        <div class="event hideable-part" data-jdks="{{value.jdks}}">
             {{{value.inner}}}
         </div>
     {{/entries}}

@@ -23,7 +23,7 @@
 <body class="d-flex flex-column h-100">
 
 <header>
-    <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">JFR Events {{this}}</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,19 @@
                         <a class="nav-link" aria-current="page" href="https://github.com/parttimenerd/jfreventcollector">GitHub</a>
                     </li>
                 </ul>
-                <span class="navbar-text">
+                <div class="btn-group event-selector" role="group" title="Select new events">
+                    {{#info}}
+                    <input type="radio" class="btn-check" data-version="8" name="btn-all-events" id="btn-all-events" autocomplete="off" checked onchange="showEvents(8)">
+                    <label class="btn btn-outline-primary" for="btn-all-events" title="All events supported in JDK {{version}}">All</label>
+                    {{#previousOneAfterLTS}}
+                    <input type="radio" class="btn-check" data-version="{{.}}" name="btn-new-since-{{.}}-events" id="btn-new-since-{{.}}-events" autocomplete="off" onchange="showEvents({{.}})">
+                    <label class="btn btn-outline-primary" for="btn-new-since-{{.}}-events" title="New events introduced since JDK {{.}}, after the last LTS release">since {{.}}</label>
+                    {{/previousOneAfterLTS}}
+                    <input type="radio" class="btn-check" data-version="{{version}}" name="btn-new-in-{{version}}-events" id="btn-new-in-{{version}}-events" autocomplete="off" onchange="showEvents({{version}})">
+                    <label class="btn btn-outline-primary" for="btn-new-in-{{version}}-events" title="New events introduced in JDK {{version}}" >in {{version}}</label>
+                    {{/info}}
+                </div>
+                <span class="navbar-text logo-span">
                     <a class="nav-link" aria-current="page" href="https://sapmachine.io"><img src="img/sapmachine.svg" class="sapmachine-logo"/></a>
                 </span>
             </div>
@@ -115,6 +127,54 @@ $("details").each(function (i, el) {
 });
 });
 anchors.add();
+
+function shouldShow(jdks, version) {
+    let parsedJDKs = jdks.map(function (el) {
+        return parseInt(el);
+    });
+    for (let i = 0; i < parsedJDKs.length; i++) {
+        if (version > parsedJDKs[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function showEvents(version) {
+    console.log(version);
+    let eventSelectors = document.querySelectorAll(".event-selector input");
+    eventSelectors.forEach(function (el) {
+        el.checked = el.dataset.version === "" + version;
+    });
+    // find all elements of the class event-part and display them only
+    // if the version is part of the data-jdks attribute
+    let eventParts = document.querySelectorAll(".hideable-part");
+    eventParts.forEach(function (el) {
+        let jdks = el.dataset.jdks.split(",");
+        var display;
+        if (shouldShow(jdks, version)) {
+            display = "block";
+        } else {
+            display = "none";
+        }
+        el.style.display = display;
+        if (el.id !== "") {
+            let element = document.querySelector(".nav-link[href=\"#" + el.id + "\"]");
+            element.style.display = display;
+        }
+    });
+    let headers = document.querySelectorAll("h1.section-header");
+    headers.forEach(function (el) {
+        let jdks = el.dataset.jdks.split(",");
+        let element = document.querySelector(".nav-link[href=\"#" + el.id + "\"]");
+        if (shouldShow(jdks, version)) {
+            font = "block";
+            element.classList.remove("hidden-toc-section");
+        } else {
+            element.classList.add("hidden-toc-section");
+        }
+    });
+}
 </script>
 
 </body>
