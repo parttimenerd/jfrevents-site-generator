@@ -4,7 +4,7 @@ import java.nio.file.Path
 
 fun create(target: Path) {
     try {
-        Main(target, Path.of("src/main/resources/")).createPage(19)
+        Main(target, Path.of("src/main/resources/")).createPage(21)
     } catch (e: Exception) {
         e.printStackTrace()
     }

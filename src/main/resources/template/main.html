@@ -23,7 +23,7 @@
 <body class="d-flex flex-column h-100">
 
 <header>
-    <nav class="navbar navbar-expand-lg navbar-dark fixed-top bg-dark">
+    <nav class="navbar navbar-expand-xl navbar-dark fixed-top bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">JFR Events {{this}}</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
@@ -54,6 +54,9 @@
                     <label class="btn btn-outline-primary" for="btn-new-in-{{version}}-events" title="New events introduced in JDK {{version}}" >in {{version}}</label>
                     {{/info}}
                 </div>
+                {{#info.hasAIGeneratedDescriptions}}
+                <span class="btn btn-outline-primary" title="Open all AI generated descriptions" onclick="toggleAIButton()" id="aiButton">AI</span>
+                {{/info.hasAIGeneratedDescriptions}}
                 <span class="navbar-text logo-span">
                     <a class="nav-link" aria-current="page" href="https://sapmachine.io"><img src="img/sapmachine.svg" class="sapmachine-logo"/></a>
                 </span>
@@ -122,7 +125,11 @@ new bootstrap.ScrollSpy(document.body, {target: '#toc'});
 $("details").each(function (i, el) {
     el.addEventListener("toggle", function (e) {
         if (e.target.open && e.target.tabAlready !== true) {
-            new bootstrap.Tab(e.target.querySelector('div').id);        }
+            let div = e.target.querySelector("div");
+            if (div !== null) {
+                new bootstrap.Tab(div.id);
+            }
+        }
     });
 });
 });
@@ -173,6 +180,19 @@ function showEvents(version) {
         } else {
             element.classList.add("hidden-toc-section");
         }
+    });
+}
+function toggleAIButton() {
+    let aiDescriptions = document.querySelectorAll(".ai-generated-description");
+    let button = document.querySelector("#aiButton");
+    let open = button.classList.contains("active");
+    if (open) {
+        button.classList.remove("active");
+    } else {
+        button.classList.add("active");
+    }
+    aiDescriptions.forEach(function (el) {
+        el.open = !open;
     });
 }
 </script>

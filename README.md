@@ -26,4 +26,5 @@ Use `bin/publish.py all` to create and publish the site.
 
 License
 -------
-GPLv2
+GPLv2, Copyright 2023 SAP SE or an SAP affiliate company,
+Johannes Bechberger and plugin contributors

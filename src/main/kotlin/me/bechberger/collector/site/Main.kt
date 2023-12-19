@@ -1,6 +1,8 @@
 package me.bechberger.collector.site
 
 import com.github.mustachejava.util.DecoratedCollection
+import java.awt.SystemColor.info
+import java.net.URI
 import java.net.URL
 import java.nio.file.Path
 import java.time.LocalDate
@@ -12,9 +14,12 @@ import me.bechberger.collector.xml.Event
 import me.bechberger.collector.xml.Example
 import me.bechberger.collector.xml.FieldType
 import me.bechberger.collector.xml.Loader
+import me.bechberger.collector.xml.Metadata
 import me.bechberger.collector.xml.Type
 import me.bechberger.collector.xml.XmlContentType
 import me.bechberger.collector.xml.XmlType
+import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
 import kotlin.io.path.exists
 
 /**
@@ -37,7 +42,7 @@ class Main(
 
     /** LTS, last and current, the only versions that anyone would work with */
     val ltsVersions = versions.filter { it in setOf(11, 17, 21, 25) }
-    val relevantVersions = ltsVersions + versions.filter { it in setOf(versions.last(), versions.last() - 1) }
+    val relevantVersions = ltsVersions
     val templating: Templating = Templating(resourceFolder)
 
     init {
@@ -52,7 +57,7 @@ class Main(
         FILES_TO_DOWNLOAD.forEach { (url, targetFile) ->
             val path = target.resolve(targetFile).toFile()
             path.parentFile.mkdirs()
-            URL(url).openStream().use { stream ->
+            URI(url).toURL().openStream().use { stream ->
                 path.outputStream().use {
                     it.write(stream.readBytes())
                 }
@@ -62,10 +67,10 @@ class Main(
 
     private fun downloadBootstrapIfNeeded() {
         if (!target.resolve("bootstrap").exists()) {
-            URL(
+            URI(
                 "https://github.com/twbs/bootstrap/releases/download/v$BOOTSTRAP_VERSION/" +
                         "bootstrap-$BOOTSTRAP_VERSION-dist.zip",
-            ).openStream().use { stream ->
+            ).toURL().openStream().use { stream ->
                 target.resolve("bootstrap.zip").toFile().outputStream().use {
                     it.write(stream.readBytes())
                 }
@@ -144,6 +149,7 @@ class Main(
         val previousOneAfterLTS: Int?,
         val tag: String,
         val date: String,
+        val hasAIGeneratedDescriptions: Boolean,
     )
 
     data class MainScope(
@@ -164,7 +170,7 @@ class Main(
         println("${metadata.events.size} events (${metadata.events.count { it.examples.isNotEmpty() }} have examples)")
         val infoScope = InfoScope(
             version,
-            version == versions.last(),
+            version == ltsVersions.last(),
             LocalDate.now().year,
             versionToFileName.map {
                 VersionToFile(
@@ -186,6 +192,7 @@ class Main(
             Loader.getSpecificVersion(version),
             LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy")),
+            metadata.events.any { it.aiGeneratedDescription != null },
         )
         val html = templating.template(
             "main.html",
@@ -509,6 +516,7 @@ class Main(
         val descriptionMissing: Boolean,
         val appearsIn: String,
         val examples: String,
+        val aiGeneratedDescription: String,
     )
 
     data class ConfigurationScope(
@@ -644,6 +652,32 @@ class Main(
         )
     }
 
+    data class DescriptionSource(val name: String, val link: String)
+
+    data class AIGeneratedDescriptionScope(val description: String, val sources: DecoratedCollection<DescriptionSource>)
+
+    fun formatAIGeneratedDescription(metadata: Metadata, event: Event): String {
+        if (event.aiGeneratedDescription == null) {
+            return "";
+        }
+        val description = event.aiGeneratedDescription!!
+        val htmlCode = HtmlRenderer.builder().build().render(Parser.builder().build().parse(description.description))
+        return templating.template(
+            "ai_gen_description.html",
+            AIGeneratedDescriptionScope(
+                htmlCode,
+                DecoratedCollection(
+                    description.sources.map {
+                        DescriptionSource(
+                            Path.of(it).fileName.toString(),
+                            metadata.url + "/" + it,
+                        )
+                    },
+                ),
+            ),
+        )
+    }
+
     fun createEventScope(metadata: me.bechberger.collector.xml.Metadata, event: Event): EventScope {
         return EventScope(
             name = event.name,
@@ -673,6 +707,7 @@ class Main(
             fields = formatFields(metadata, event, event.duration && !event.fakeDuration),
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
             examples = formatTypeExamples(metadata, event),
+            aiGeneratedDescription = formatAIGeneratedDescription(metadata, event),
         )
     }
 
