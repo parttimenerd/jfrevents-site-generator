@@ -32,18 +32,19 @@ class Main(
 ) {
 
     val versions = Loader.getVersions()
+
+    /** LTS, last and current, the only versions that anyone would work with */
+    val ltsVersions = versions.filter { it in setOf(11, 17, 21, 25) }
+    val relevantVersions = ltsVersions + (if (versions.last() - 1 !in ltsVersions) listOf(versions.last() - 1) else listOf())
+    val templating: Templating = Templating(resourceFolder)
+
     val versionToFileName = versions.associateWithTo(TreeMap<Int, String>()) {
-        if (it != versions.last() - 1) {
+        if (it != ltsVersions.last()) {
             "$fileNamePrefix$it.html"
         } else {
             if (fileNamePrefix != "") "$fileNamePrefix.html" else "index.html"
         }
     }
-
-    /** LTS, last and current, the only versions that anyone would work with */
-    val ltsVersions = versions.filter { it in setOf(11, 17, 21, 25) }
-    val relevantVersions = ltsVersions
-    val templating: Templating = Templating(resourceFolder)
 
     init {
         target.toFile().mkdirs()
@@ -103,6 +104,7 @@ class Main(
 
     fun List<Int>.toSupportedRelevantJDKScopes(shorten: Boolean): SupportedRelevantJDKsScope {
         val relVersions = filter { it in relevantVersions }
+        println(relVersions)
         val relevantSinceVersion = if (relevantVersions.isSubList(relVersions)) relVersions.first() else null
         val sinceVersion = if (versions.isSubList(this)) first() else relevantSinceVersion
         val supportedRelevantJDKsScope = SupportedRelevantJDKsScope(
@@ -133,6 +135,7 @@ class Main(
 
     fun formatJDKBadges(jdks: List<Int>, shorten: Boolean) =
         if (!shorten || !relevantVersions.all { it in jdks }) {
+            println("jdks: $jdks")
             templating.template(
                 "jdk_badges.html",
                 jdks.toSupportedRelevantJDKScopes(shorten),
