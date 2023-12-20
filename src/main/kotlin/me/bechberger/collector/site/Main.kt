@@ -104,7 +104,6 @@ class Main(
 
     fun List<Int>.toSupportedRelevantJDKScopes(shorten: Boolean): SupportedRelevantJDKsScope {
         val relVersions = filter { it in relevantVersions }
-        println(relVersions)
         val relevantSinceVersion = if (relevantVersions.isSubList(relVersions)) relVersions.first() else null
         val sinceVersion = if (versions.isSubList(this)) first() else relevantSinceVersion
         val supportedRelevantJDKsScope = SupportedRelevantJDKsScope(
