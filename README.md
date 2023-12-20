@@ -18,7 +18,7 @@ java -jar target/jfrevents-site-generator-full.jar site
 
 Development
 -----------
-`WatchKt` builds the version 19 of the site (currently `index.html`) every time the resources change.
+`WatchKt` builds the version 21 of the site (currently `index.html`) every time the resources change.
 
 `bin/publish.py` is used to publish the site at [sapmachine.io/jfrevents](https://sapmachine.io/jfrevents).
 
@@ -27,4 +27,4 @@ Use `bin/publish.py all` to create and publish the site.
 License
 -------
 GPLv2, Copyright 2023 SAP SE or an SAP affiliate company,
-Johannes Bechberger and plugin contributors
+Johannes Bechberger and contributors

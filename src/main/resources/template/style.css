@@ -114,6 +114,9 @@
 }
 
 @media (max-width: 1199px) {
+    .sapmachine-logo {
+        margin-bottom: 0px;
+    }
     .jdk-label {
         display: inline;
     }
