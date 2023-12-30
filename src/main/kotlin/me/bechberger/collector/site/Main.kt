@@ -39,12 +39,10 @@ class Main(
     val templating: Templating = Templating(resourceFolder)
 
     val versionToFileName = versions.associateWithTo(TreeMap<Int, String>()) {
-        if (it != ltsVersions.last()) {
-            "$fileNamePrefix$it.html"
-        } else {
-            if (fileNamePrefix != "") "$fileNamePrefix.html" else "index.html"
-        }
+        "$fileNamePrefix$it.html"
     }
+
+    val indexFileName = if (fileNamePrefix.isEmpty()) "index.html" else "$fileNamePrefix.html"
 
     init {
         target.toFile().mkdirs()
@@ -134,7 +132,6 @@ class Main(
 
     fun formatJDKBadges(jdks: List<Int>, shorten: Boolean) =
         if (!shorten || !relevantVersions.all { it in jdks }) {
-            println("jdks: $jdks")
             templating.template(
                 "jdk_badges.html",
                 jdks.toSupportedRelevantJDKScopes(shorten),
@@ -166,6 +163,12 @@ class Main(
         val isBeta: Boolean,
         val isRelevant: Boolean,
     )
+
+    fun createIndexPage() {
+        templating.template("index.html", mapOf("forward" to versionToFileName[ltsVersions.last()]!!)).let {
+            target.resolve(indexFileName).toFile().writeText(it)
+        }
+    }
 
     fun createPage(version: Int) {
         val metadata = Loader.loadVersion(version)
@@ -207,6 +210,7 @@ class Main(
     }
 
     fun create() {
+        createIndexPage()
         versions.forEach { createPage(it) }
     }
 
