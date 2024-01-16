@@ -527,6 +527,8 @@ class Main(
     data class EventScope(
         val name: String,
         val categories: DecoratedCollection<String>,
+        val stackFilter: DecoratedCollection<String>,
+        val showStackFilter: Boolean,
         val description: String?,
         val additionalDescription: String?,
         val flags: Flags,
@@ -706,6 +708,8 @@ class Main(
         return EventScope(
             name = event.name,
             categories = DecoratedCollection(event.categories()),
+            stackFilter = DecoratedCollection(event.stackFilter),
+            showStackFilter = event.stackFilter.isNotEmpty(),
             description = event.description,
             additionalDescription = event.additionalDescription,
             flags = Flags(

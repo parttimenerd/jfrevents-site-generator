@@ -54,6 +54,11 @@
   {{value}} {{^last}} / {{/last}}
   {{/categories}}
 </p>
+{{#showStackFilter}}
+<p class="stackFilter"><span class="fw-light">Excludes in stack trace:</span>
+  {{#stackFilter}}{{value}}{{^last}}, {{/last}}{{/stackFilter}}
+</p>
+{{/showStackFilter}}
 {{{appearsIn}}}
 <p class="event-description b-1 l-1 r-1">
   {{#description}}
