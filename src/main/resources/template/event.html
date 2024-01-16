@@ -33,7 +33,17 @@
   {{#period}}
   <span class="badge bg-success period-badge">{{.}}</span>
   {{/period}}
-  {{{jdkBadges}}}
+  {{^inGraalOnly}}
+    {{{jdkBadges}}}
+  {{/inGraalOnly}}
+  {{#inGraalOnly}}
+  <span class="badge bg-danger period-badge">graal vm only</span>
+  {{/inGraalOnly}}
+  {{^inGraalOnly}}
+  {{#inGraal}}
+    <span class="badge bg-success period-badge">graal vm</span>
+  {{/inGraal}}
+  {{/inGraalOnly}}
   {{/flags}}
 </p>
 {{#source}}

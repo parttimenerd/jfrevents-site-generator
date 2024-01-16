@@ -140,6 +140,12 @@ class Main(
             ""
         }
 
+    class GraalVMInfo(
+        val tag: String,
+        val version: String,
+        val url: String
+    )
+
     class InfoScope(
         val version: Int,
         val isCurrent: Boolean,
@@ -149,6 +155,8 @@ class Main(
         val tag: String,
         val date: String,
         val hasAIGeneratedDescriptions: Boolean,
+        val url: String,
+        val graalVMInfo: GraalVMInfo? = null,
     )
 
     data class MainScope(
@@ -200,6 +208,8 @@ class Main(
             LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy")),
             metadata.events.any { it.aiGeneratedDescription != null },
+            metadata.url!!,
+            metadata.graalVMInfo?.let { GraalVMInfo(it.tag, it.version, it.url) },
         )
         val html = templating.template(
             "main.html",
@@ -216,9 +226,11 @@ class Main(
         versions.forEach { createPage(it) }
     }
 
-    data class SectionEntryScope(val name: String, val inner: String, val jdks: String)
+    data class SectionEntryScope(val name: String, val inner: String, val jdks: String,
+                                 val inGraalOnly: Boolean, val inJDKOnly: Boolean)
 
-    data class SectionScope(val title: String, val entries: DecoratedCollection<SectionEntryScope>, val jdks: String)
+    data class SectionScope(val title: String, val entries: DecoratedCollection<SectionEntryScope>, val jdks: String,
+                            val inGraalOnly: Boolean, val inJDKOnly: Boolean)
 
     data class Flags(
         val isEnabled: Boolean,
@@ -232,6 +244,8 @@ class Main(
         val hasStackTrace: Boolean,
         val hasThread: Boolean,
         val period: String?,
+        val inGraal: Boolean,
+        val inGraalOnly: Boolean
     )
 
     data class TypeDescriptorScope(val name: String, val description: String? = null, val link: String? = null)
@@ -553,7 +567,9 @@ class Main(
     }
 
     fun groupEventsByTopLevelCategory(metadata: me.bechberger.collector.xml.Metadata): List<Pair<String, List<Event>>> {
-        val sections = metadata.events.groupBy { it.topLevelCategory() }
+        val sections = metadata.events
+            .filter { it.name != "EveryChunkPeriodEvents" && it.name != "EndChunkPeriodEvents" }
+            .groupBy { it.topLevelCategory() }
         return sections.map { (section, events) ->
             section to events
         }.sortedBy { it.first }
@@ -705,7 +721,9 @@ class Main(
                 hasDuration = event.duration && !event.fakeDuration,
                 hasThread = event.thread,
                 hasStackTrace = event.stackTrace,
-                period = event.period?.name?.replace("_", " ")?.lowercase(),
+                period = event.period?.replace("_", " ")?.lowercase(),
+                inGraal = event.isInJDKAndGraal() || event.isGraalOnly(),
+                inGraalOnly = event.isGraalOnly(),
             ),
             source = event.source,
             configurations = createConfigurationScope(metadata, event),
@@ -733,15 +751,28 @@ class Main(
         title: String,
         events: List<Event>,
     ): SectionScope {
+        val combinedVariant = combinedVariant(events.map { it.includedInVariant })
         return SectionScope(
             title,
             DecoratedCollection(
                 events.map {
-                    SectionEntryScope(it.name, formatEvent(metadata, it), formatJDKList(it.jdks))
+                    SectionEntryScope(it.name, formatEvent(metadata, it), formatJDKList(it.jdks), it.isGraalOnly(), it.isJDKOnly())
                 },
             ),
             formatJDKList(listOf(events.map { it.jdks.min() }.max())),
+            combinedVariant == Event.GRAAL_ONLY,
+            combinedVariant == Event.JDK_ONLY
         )
+    }
+
+    private fun combinedVariant(variants: List<String>): String {
+        return if (variants.all { it == Event.GRAAL_ONLY }) {
+            return Event.GRAAL_ONLY
+        } else if (variants.all { it == Event.JDK_ONLY }) {
+            return Event.JDK_ONLY
+        } else {
+            return Event.JDK_AND_GRAAL
+        }
     }
 
     fun createTypeSection(
@@ -753,10 +784,12 @@ class Main(
             title,
             DecoratedCollection(
                 types.sortedBy { it.name }.map {
-                    SectionEntryScope(it.name, formatType(metadata, it), formatJDKList(it.jdks))
+                    SectionEntryScope(it.name, formatType(metadata, it), formatJDKList(it.jdks), false, false)
                 },
             ),
             formatJDKList(listOf(types.map { it.jdks.min() }.max())),
+            false,
+            false
         )
     }
 
