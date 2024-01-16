@@ -33,10 +33,25 @@
                 <ul class="navbar-nav me-auto mb-2 mb-md-0">
                     {{#info}}
                         {{#versions}}
+                        {{#isRelevant}}
                         <li class="nav-item">
-                            <a class="nav-link {{#isCurrent}}active{{/isCurrent}} {{#isRelevant}}relevant{{/isRelevant}}" aria-current="page" href="{{fileName}}"><span class="jdk-label">JDK</span> {{version}}</a>
+                            <a class="nav-link {{#isCurrent}}active{{/isCurrent}} {{#isLTS}}relevant{{/isLTS}}" aria-current="page" href="{{fileName}}"><span class="jdk-label">JDK</span> {{version}}</a>
                         </li>
+                        {{/isRelevant}}
                         {{/versions}}
+                        <!-- drop down of all irrelevant versions-->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Other
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                                {{#versions}}
+                                {{^isRelevant}}
+                                <li><a class="dropdown-item" href="{{fileName}}"><span class="jdk-label">JDK</span> {{version}}</a></li>
+                                {{/isRelevant}}
+                                {{/versions}}
+                            </ul>
+                        </li>
                     {{/info}}
                     <li class="nav-item">
                         <a class="nav-link" aria-current="page" href="https://github.com/parttimenerd/jfreventcollector">GitHub</a>

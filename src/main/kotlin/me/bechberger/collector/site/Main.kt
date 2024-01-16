@@ -35,7 +35,7 @@ class Main(
 
     /** LTS, last and current, the only versions that anyone would work with */
     val ltsVersions = versions.filter { it in setOf(11, 17, 21, 25) }
-    val relevantVersions = ltsVersions + (if (versions.last() - 1 !in ltsVersions) listOf(versions.last() - 1) else listOf())
+    val relevantVersions = (ltsVersions + listOf(versions.last(), versions.last() - 1)).distinct().sorted()
     val templating: Templating = Templating(resourceFolder)
 
     val versionToFileName = versions.associateWithTo(TreeMap<Int, String>()) {
@@ -161,6 +161,7 @@ class Main(
         val fileName: String,
         val isCurrent: Boolean,
         val isBeta: Boolean,
+        val isLTS: Boolean,
         val isRelevant: Boolean,
     )
 
@@ -183,6 +184,7 @@ class Main(
                     it.value,
                     it.key == version,
                     it.key == versions.last() - 1,
+                    it.key in ltsVersions,
                     relevantVersions.contains(it.key),
                 )
             }.toTypedArray(),
