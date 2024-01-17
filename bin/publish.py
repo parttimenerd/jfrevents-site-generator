@@ -18,7 +18,7 @@ SITE_FOLDER = "site"
 
 
 def clean():
-    shutil.rmtree(SAPMACHINE_FOLDER)
+    shutil.rmtree(SAPMACHINE_FOLDER, ignore_errors=True)
     clean_gen()
 
 
