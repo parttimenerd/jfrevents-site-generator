@@ -16,6 +16,21 @@ mvn clean package assembly:single
 java -jar target/jfrevents-site-generator-full.jar site
 ```
 
+Site generator options:
+
+```
+Usage: generator [-hV] [-p=<prefix>] [--goat-counter-url
+                 [=<goatCounterUrls>...]]... <target>
+Generates a site with specified parameters.
+      <target>            The target directory.
+      --goat-counter-url[=<goatCounterUrls>...]
+                          GoatCounter is an open source web analytics platform.
+                            This is the URL for GoatCounter.
+  -h, --help              Show this help message and exit.
+  -p, --prefix=<prefix>   The filename prefix.
+  -V, --version           Print version information and exit.
+```
+
 Development
 -----------
 `WatchKt` builds the version 21 of the site (currently `index.html`) every time the resources change.

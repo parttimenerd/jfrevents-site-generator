@@ -9,6 +9,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.TreeMap
+import java.util.concurrent.Callable
 import me.bechberger.collector.xml.AbstractType
 import me.bechberger.collector.xml.Event
 import me.bechberger.collector.xml.Example
@@ -20,15 +21,18 @@ import me.bechberger.collector.xml.XmlContentType
 import me.bechberger.collector.xml.XmlType
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
+import picocli.CommandLine
 import kotlin.io.path.exists
 
 /**
  * @param fileNamePrefix the prefix for all but the index.html, the latter is named prefix.html
+ * @param goatCounterId the id for goatcounter, if null, no goatcounter is used
  */
 class Main(
     val target: Path,
     resourceFolder: Path? = null,
     val fileNamePrefix: String = "",
+    val goatCounterUrls: List<String> = listOf()
 ) {
 
     val versions = Loader.getVersions()
@@ -156,7 +160,8 @@ class Main(
         val date: String,
         val hasAIGeneratedDescriptions: Boolean,
         val url: String,
-        val graalVMInfo: GraalVMInfo? = null,
+        val graalVMInfo: GraalVMInfo?,
+        val goatCounterUlrs: List<String>,
     )
 
     data class MainScope(
@@ -210,6 +215,7 @@ class Main(
             metadata.events.any { it.aiGeneratedDescription != null },
             metadata.url!!,
             metadata.graalVMInfo?.let { GraalVMInfo(it.tag, it.version, it.url) },
+            goatCounterUrls
         )
         val html = templating.template(
             "main.html",
@@ -725,7 +731,14 @@ class Main(
                 hasDuration = event.duration && !event.fakeDuration,
                 hasThread = event.thread,
                 hasStackTrace = event.stackTrace,
-                period = event.period?.replace("_", " ")?.lowercase(),
+                period = event.period?.let {
+                    when (it) {
+                        "endChunk" -> "end of every chunk"
+                        "beginChunk" -> "begin of every chunk"
+                        "everyChunk" -> "every chunk"
+                        else -> "every $it"
+                    }
+                },
                 inGraal = event.isInJDKAndGraal() || event.isGraalOnly(),
                 inGraalOnly = event.isGraalOnly(),
             ),
@@ -839,14 +852,34 @@ class Main(
     }
 }
 
+@CommandLine.Command(
+    name = "generator",
+    mixinStandardHelpOptions = true,
+    description = ["Generates a site with specified parameters."],
+    version = ["generator 1.0"]
+)
+class GeneratorCommand : Callable<Int> {
+
+    @CommandLine.Parameters(index = "0", description = ["The target directory."])
+    lateinit var target: Path
+
+    @CommandLine.Option(names = ["-p", "--prefix"], description = ["The filename prefix."])
+    var prefix: String? = null
+
+    @CommandLine.Option(names = ["--goat-counter-url"],
+        description = ["GoatCounter is an open source web analytics platform. This is the URL for GoatCounter."],
+        arity = "0..*")
+    var goatCounterUrls: List<String> = listOf()
+
+    override fun call(): Int {
+        // Here you can implement the logic of your command
+        // For example:
+        Main(target, fileNamePrefix = prefix ?: "", goatCounterUrls = goatCounterUrls).create()
+        return 0
+    }
+}
+
 fun main(args: Array<String>) {
-    if (args.isEmpty() || args.size > 2) {
-        println("Usage: generator <target> [<filename prefix>]")
-        return
-    }
-    if (args.size == 1) {
-        Main(Path.of(args[0])).create()
-    } else {
-        Main(Path.of(args[0]), fileNamePrefix = args[1]).create()
-    }
+    val exitCode = CommandLine(GeneratorCommand()).execute(*args)
+    System.exit(exitCode)
 }

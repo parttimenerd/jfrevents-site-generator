@@ -84,6 +84,11 @@
             <artifactId>kotlin-stdlib-jdk8</artifactId>
             <version>1.9.0</version>
         </dependency>
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.5</version>
+        </dependency>
     </dependencies>
 
     <repositories>

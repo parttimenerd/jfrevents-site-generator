@@ -143,7 +143,7 @@ $('.field-type-header').popover({
 $('.period-badge').popover({
     trigger: 'hover',
     placement: 'top',
-    content: 'Period: Chunks in which the event is emitted or time interval',
+    content: 'Event emitting interval; an interval or chunk related',
 });
 $('.graal-badge').popover({
     trigger: 'hover',
@@ -295,6 +295,10 @@ function toggleAIButton() {
     });
 }
 </script>
+{{#info.goatCounterUrls}}
+<script data-goatcounter="{.}/count"
+        async src="{.}/count.js"></script>
+{{/info.goatCounterUrls}}
 
 </body>
 </html>
