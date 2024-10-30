@@ -718,7 +718,7 @@ class Main(
         )
     }
 
-    data class CodeContextScope(val contexts: List<SingleCodeContextScope>)
+    data class CodeContextScope(val licenseUrl: String, val contexts: List<SingleCodeContextScope>)
 
     data class SingleCodeContextScope(
         val url: String, val path: String,
@@ -736,6 +736,7 @@ class Main(
         return templating.template(
             "code_context.html",
             CodeContextScope(
+                "${metadata.url}/LICENSE",
                 event.context!!.map { it ->
                     SingleCodeContextScope(
                         "${metadata.url}/${it.path}#L${it.startLine}-L${it.endLine}",
