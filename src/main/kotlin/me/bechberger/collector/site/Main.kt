@@ -1,9 +1,7 @@
 package me.bechberger.collector.site
 
 import com.github.mustachejava.util.DecoratedCollection
-import java.awt.SystemColor.info
 import java.net.URI
-import java.net.URL
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,10 +21,11 @@ import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
 import picocli.CommandLine
 import kotlin.io.path.exists
+import kotlin.system.exitProcess
 
 /**
  * @param fileNamePrefix the prefix for all but the index.html, the latter is named prefix.html
- * @param goatCounterId the id for goatcounter, if null, no goatcounter is used
+ * @param goatCounterUrls the url for goatcounter, if null, no goatcounter is used
  */
 class Main(
     val target: Path,
@@ -159,7 +158,9 @@ class Main(
         val tag: String,
         val date: String,
         val hasAIGeneratedDescriptions: Boolean,
+        val hasCodeContexts: Boolean,
         val url: String,
+        val permanentURL: String?,
         val graalVMInfo: GraalVMInfo?,
         val goatCounterUlrs: List<String>,
     )
@@ -213,7 +214,9 @@ class Main(
             LocalDate.ofInstant(Loader.getCreationDate(), ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd-MMMM-yyyy")),
             metadata.events.any { it.aiGeneratedDescription != null },
+            metadata.events.any { it.context.isNullOrEmpty().not() },
             metadata.url!!,
+            if (metadata.permanentUrl == metadata.url!!) null else metadata.permanentUrl,
             metadata.graalVMInfo?.let { GraalVMInfo(it.tag, it.version, it.url) },
             goatCounterUrls
         )
@@ -232,11 +235,15 @@ class Main(
         versions.forEach { createPage(it) }
     }
 
-    data class SectionEntryScope(val name: String, val inner: String, val jdks: String,
-                                 val inGraalOnly: Boolean, val inJDKOnly: Boolean)
+    data class SectionEntryScope(
+        val name: String, val inner: String, val jdks: String,
+        val inGraalOnly: Boolean, val inJDKOnly: Boolean
+    )
 
-    data class SectionScope(val title: String, val entries: DecoratedCollection<SectionEntryScope>, val jdks: String,
-                            val inGraalOnly: Boolean, val inJDKOnly: Boolean)
+    data class SectionScope(
+        val title: String, val entries: DecoratedCollection<SectionEntryScope>, val jdks: String,
+        val inGraalOnly: Boolean, val inJDKOnly: Boolean
+    )
 
     data class Flags(
         val isEnabled: Boolean,
@@ -283,7 +290,7 @@ class Main(
     }
 
     /** for XMLType and Type */
-    fun createTypeDescriptorScope(metadata: me.bechberger.collector.xml.Metadata, type: String): TypeDescriptorScope {
+    fun createTypeDescriptorScope(metadata: Metadata, type: String): TypeDescriptorScope {
         return (
                 metadata.getSpecificType(type, metadata.types) ?: metadata.getSpecificType(
                     type,
@@ -299,7 +306,7 @@ class Main(
     }
 
     fun createContentTypeDescriptorScope(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         type: String,
     ): TypeDescriptorScope? {
         return metadata.getSpecificType(type, metadata.xmlContentTypes)?.let {
@@ -312,7 +319,7 @@ class Main(
     }
 
     fun createFieldScope(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         field: me.bechberger.collector.xml.Field,
         parent: Type<*>,
     ): FieldScope {
@@ -344,7 +351,7 @@ class Main(
     )
 
     fun createTypeTableScope(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         type: XmlType,
     ): TypesTableScope {
         return TypesTableScope(
@@ -373,14 +380,14 @@ class Main(
         val annotation: String?,
     )
 
-    fun formatTypesTable(metadata: me.bechberger.collector.xml.Metadata, type: XmlType): String {
+    fun formatTypesTable(metadata: Metadata, type: XmlType): String {
         return templating.template(
             "types_table.html",
             createTypeTableScope(metadata, type),
         )
     }
 
-    fun createTypeScope(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): TypeScope {
+    fun createTypeScope(metadata: Metadata, type: AbstractType<*>): TypeScope {
         val descriptionAndLabelLength = type.label.length + (type.additionalDescription?.length ?: 0)
         return TypeScope(
             type.name,
@@ -397,7 +404,7 @@ class Main(
         )
     }
 
-    fun formatType(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
+    fun formatType(metadata: Metadata, type: AbstractType<*>): String {
         return templating.template(
             "type.html",
             createTypeScope(metadata, type),
@@ -410,7 +417,7 @@ class Main(
         val show: Boolean,
     )
 
-    fun createAppearsInScope(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): AppearsInScope {
+    fun createAppearsInScope(metadata: Metadata, type: AbstractType<*>): AppearsInScope {
         val appearsIn = type.appearedIn.map { file -> metadata.getExampleName(file) }.toSet()
         val missesIn = metadata.exampleFiles.map { it.label }.toSet() - appearsIn
 
@@ -425,7 +432,7 @@ class Main(
         )
     }
 
-    fun formatAppearsIn(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
+    fun formatAppearsIn(metadata: Metadata, type: AbstractType<*>): String {
         val appearsInScope = createAppearsInScope(metadata, type)
         return templating.template(
             "appears_in.html",
@@ -463,7 +470,7 @@ class Main(
     )
 
     fun formatExample(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         example: Example,
         depth: Int = 0,
         firstComplex: Boolean = true,
@@ -524,7 +531,7 @@ class Main(
     }
 
     fun createExampleScope(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         example: Example,
     ): ExampleScope {
         return ExampleScope(metadata.getExampleName(example.exampleFile), formatExample(metadata, example))
@@ -547,6 +554,7 @@ class Main(
         val appearsIn: String,
         val examples: String,
         val aiGeneratedDescription: String,
+        val codeContext: String,
     )
 
     data class ConfigurationScope(
@@ -574,7 +582,7 @@ class Main(
         return cats.first()
     }
 
-    fun groupEventsByTopLevelCategory(metadata: me.bechberger.collector.xml.Metadata): List<Pair<String, List<Event>>> {
+    fun groupEventsByTopLevelCategory(metadata: Metadata): List<Pair<String, List<Event>>> {
         val sections = metadata.events
             .filter { it.name != "EveryChunkPeriodEvents" && it.name != "EndChunkPeriodEvents" }
             .groupBy { it.topLevelCategory() }
@@ -583,7 +591,7 @@ class Main(
         }.sortedBy { it.first }
     }
 
-    fun me.bechberger.collector.xml.Metadata.getConfigurationName(id: Int): String {
+    fun Metadata.getConfigurationName(id: Int): String {
         return when (configurations[id].label) {
             "Profiling" -> "profiling"
             "Continuous" -> "default"
@@ -591,19 +599,19 @@ class Main(
         }
     }
 
-    fun me.bechberger.collector.xml.Metadata.getExampleName(id: Int): String {
+    fun Metadata.getExampleName(id: Int): String {
         return exampleFiles[id].label
     }
 
     fun createConfigurationScope(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         event: Event,
     ): ConfigurationScope? {
         val configs = event.configurations
         if (configs.isEmpty()) {
             return null
         }
-        val configEntryNames = configs.flatMap { it.settings.map { it.name } }.distinct().sorted()
+        val configEntryNames = configs.flatMap { it -> it.settings.map { it.name } }.distinct().sorted()
         return ConfigurationScope(
             configEntryNames.dropLast(1),
             configEntryNames.last(),
@@ -640,7 +648,7 @@ class Main(
     }
 
     fun formatFields(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         type: Type<*>,
         showEndTimeField: Boolean = true
     ): String {
@@ -657,7 +665,7 @@ class Main(
         )
     }
 
-    fun formatExamples(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
+    fun formatExamples(metadata: Metadata, type: AbstractType<*>): String {
         if (type.examples.isEmpty()) {
             return ""
         }
@@ -670,7 +678,7 @@ class Main(
         )
     }
 
-    fun formatTypeExamples(metadata: me.bechberger.collector.xml.Metadata, type: AbstractType<*>): String {
+    fun formatTypeExamples(metadata: Metadata, type: AbstractType<*>): String {
         if (type.examples.isEmpty()) {
             return ""
         }
@@ -690,7 +698,7 @@ class Main(
 
     fun formatAIGeneratedDescription(metadata: Metadata, event: Event): String {
         if (event.aiGeneratedDescription == null) {
-            return "";
+            return ""
         }
         val description = event.aiGeneratedDescription!!
         val htmlCode = HtmlRenderer.builder().build().render(Parser.builder().build().parse(description.description))
@@ -710,7 +718,40 @@ class Main(
         )
     }
 
-    fun createEventScope(metadata: me.bechberger.collector.xml.Metadata, event: Event): EventScope {
+    data class CodeContextScope(val contexts: List<SingleCodeContextScope>)
+
+    data class SingleCodeContextScope(
+        val url: String, val path: String,
+        val startLine: Int, val endLine: Int,
+        /** cpp or java */
+        val language: String,
+        val highlightedLines: List<Int>,
+        val snippet: String
+    )
+
+    fun formatCodeContext(metadata: Metadata, event: Event): String {
+        if (event.context.isNullOrEmpty()) {
+            return ""
+        }
+        return templating.template(
+            "code_context.html",
+            CodeContextScope(
+                event.context!!.map { it ->
+                    SingleCodeContextScope(
+                        "${metadata.url}/${it.path}#L${it.startLine}-L${it.endLine}",
+                        it.path,
+                        it.startLine,
+                        it.endLine,
+                        if (it.path.endsWith(".java")) "java" else "cpp",
+                        it.lines.map { line -> line + 1 },
+                        it.snippet
+                    )
+                }
+            )
+        )
+    }
+
+    fun createEventScope(metadata: Metadata, event: Event): EventScope {
         return EventScope(
             name = event.name,
             categories = DecoratedCollection(event.categories()),
@@ -751,10 +792,11 @@ class Main(
             descriptionMissing = event.description.isNullOrBlank() && event.additionalDescription.isNullOrBlank(),
             examples = formatTypeExamples(metadata, event),
             aiGeneratedDescription = formatAIGeneratedDescription(metadata, event),
+            codeContext = formatCodeContext(metadata, event)
         )
     }
 
-    fun formatEvent(metadata: me.bechberger.collector.xml.Metadata, event: Event): String {
+    fun formatEvent(metadata: Metadata, event: Event): String {
         val eventScope = createEventScope(metadata, event)
         return templating.template("event.html", eventScope)
     }
@@ -764,7 +806,7 @@ class Main(
     }
 
     fun createEventSection(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         title: String,
         events: List<Event>,
     ): SectionScope {
@@ -773,7 +815,13 @@ class Main(
             title,
             DecoratedCollection(
                 events.map {
-                    SectionEntryScope(it.name, formatEvent(metadata, it), formatJDKList(it.jdks), it.isGraalOnly(), it.isJDKOnly())
+                    SectionEntryScope(
+                        it.name,
+                        formatEvent(metadata, it),
+                        formatJDKList(it.jdks),
+                        it.isGraalOnly(),
+                        it.isJDKOnly()
+                    )
                 },
             ),
             formatJDKList(listOf(events.map { it.jdks.min() }.max())),
@@ -793,7 +841,7 @@ class Main(
     }
 
     fun createTypeSection(
-        metadata: me.bechberger.collector.xml.Metadata,
+        metadata: Metadata,
         title: String,
         types: List<AbstractType<*>>,
     ): SectionScope {
@@ -805,12 +853,12 @@ class Main(
                 },
             ),
             formatJDKList(listOf(types.map { it.jdks.min() }.max())),
-            false,
-            false
+            inGraalOnly = false,
+            inJDKOnly = false
         )
     }
 
-    fun body(metadata: me.bechberger.collector.xml.Metadata, infoScope: InfoScope): List<String> {
+    fun body(metadata: Metadata, infoScope: InfoScope): List<String> {
         val sections: MutableList<String> = mutableListOf(templating.template("intro.html", infoScope))
         sections.addAll(
             groupEventsByTopLevelCategory(metadata).map { (title, events) ->
@@ -842,12 +890,21 @@ class Main(
     }
 
     companion object {
-        const val BOOTSTRAP_VERSION = "5.2.3"
+        const val BOOTSTRAP_VERSION = "5.3.3"
         val FILES_TO_DOWNLOAD = mapOf(
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js" to "js/bootstrap-toc.js",
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css" to "css/bootstrap-toc.css",
-            "https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js" to "js/jquery.min.js",
+            "https://cdn.jsdelivr.net/npm/jquery/dist/jquery.min.js" to "js/jquery.min.js",
             "https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js" to "js/anchor.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/prism.min.js" to "js/prism.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/themes/prism.min.css" to "css/prism.min.css",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/components/prism-cpp.min.js" to "js/prism-cpp.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/components/prism-c.min.js" to "js/prism-c.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/components/prism-java.min.js" to "js/prism-java.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/plugins/line-highlight/prism-line-highlight.min.css" to "css/prism-line-highlight.min.css",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/plugins/line-highlight/prism-line-highlight.min.js" to "js/prism-line-highlight.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/plugins/line-numbers/prism-line-numbers.min.css" to "css/prism-line-numbers.min.css",
+            "https://cdnjs.cloudflare.com/ajax/libs/prism/9000.0.1/plugins/line-numbers/prism-line-numbers.min.js" to "js/prism-line-numbers.min.js",
         )
     }
 }
@@ -866,9 +923,11 @@ class GeneratorCommand : Callable<Int> {
     @CommandLine.Option(names = ["-p", "--prefix"], description = ["The filename prefix."])
     var prefix: String? = null
 
-    @CommandLine.Option(names = ["--goat-counter-url"],
+    @CommandLine.Option(
+        names = ["--goat-counter-url"],
         description = ["GoatCounter is an open source web analytics platform. This is the URL for GoatCounter."],
-        arity = "0..*")
+        arity = "0..*"
+    )
     var goatCounterUrls: List<String> = listOf()
 
     override fun call(): Int {
@@ -881,5 +940,5 @@ class GeneratorCommand : Callable<Int> {
 
 fun main(args: Array<String>) {
     val exitCode = CommandLine(GeneratorCommand()).execute(*args)
-    System.exit(exitCode)
+    exitProcess(exitCode)
 }
