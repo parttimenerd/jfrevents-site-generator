@@ -30,7 +30,7 @@ def clean_gen():
 def clone():
     if os.path.exists(SAPMACHINE_FOLDER):
         shutil.rmtree(SAPMACHINE_FOLDER, ignore_errors=True)
-    os.system(f"git clone git@github.com:SAP/SapMachine.git --branch gh-pages --single-branch "
+    os.system(f"git clone git@github.com:SAP/SapMachine-infrastructure.git --branch gh-pages --single-branch "
               f"--depth 1 {SAPMACHINE_FOLDER}")
     os.system(f"cd {SAPMACHINE_FOLDER}; git pull --rebase")
 
