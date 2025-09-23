@@ -5,7 +5,9 @@ JFR Events Site Generator
 
 Uses the data from the [jfreventscollector](https://github.com/SAP/sapmachine-jfreventcollector)
 project to generate a website with all the JFR events seen at [SapMachine](https://sapmachine.io/jfrevents).
-
+Nightly releases can be found at [parttimenerd.github.io/jfrevents](https://parttimenerd.github.io/jfrevents)
+these are generated automatically whenever I update the underlying data set and might therefore
+a bit fresher then the SapMachine page.
 ![Screenshot](img/screenshot.png)
 
 Build
@@ -36,10 +38,6 @@ Generates a site with specified parameters.
 Development
 -----------
 `WatchKt` builds the version 21 of the site (currently `index.html`) every time the resources change.
-
-`bin/publish.py` is used to publish the site at [sapmachine.io/jfrevents](https://sapmachine.io/jfrevents).
-
-Use `bin/publish.py all` to create and publish the site.
 
 ## Support, Feedback, Contributing
 
