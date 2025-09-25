@@ -895,7 +895,7 @@ class Main(
     }
 
     companion object {
-        const val BOOTSTRAP_VERSION = "5.3.3"
+        const val BOOTSTRAP_VERSION = "5.3.8"
         val FILES_TO_DOWNLOAD = mapOf(
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.js" to "js/bootstrap-toc.js",
             "https://raw.githubusercontent.com/afeld/bootstrap-toc/gh-pages/dist/bootstrap-toc.css" to "css/bootstrap-toc.css",
