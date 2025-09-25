@@ -202,6 +202,9 @@ summary {
 a.hidden-toc-section {
     font-size: 0px !important;
 }
+a.hidden-subtoc-section {
+    display: none !important;
+}
 .ai-generated-description {
     font-size: 0.9em;
     opacity: 0.9;
@@ -244,4 +247,104 @@ a.hidden-toc-section {
 }
 .stackFilter {
     font-size: 0.9em;
+}
+
+/* Search functionality styles */
+.search-container {
+    min-width: 300px;
+}
+
+.search-container .input-group {
+    max-width: 400px;
+}
+
+.search-container input {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.search-container input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.search-container input:focus {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: #0d6efd;
+    color: white;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.search-container .btn-outline-secondary {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.search-container .btn-outline-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
+}
+
+.search-help ul {
+    padding-left: 1.5rem;
+}
+
+.search-help code {
+    background-color: #f8f9fa;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+}
+
+/* Help modal headers - use dark blue instead of light blue */
+.search-help h4, .search-help h5, .search-help h6 {
+    color: #1e3a8a !important;
+}
+
+/* Help modal card titles and text colors - use dark blue */
+.search-help .card-title.text-primary {
+    color: #1e3a8a !important;
+}
+
+.search-help .text-primary {
+    color: #1e3a8a !important;
+}
+
+/* Help modal info colors - use dark blue */
+.search-help .text-info {
+    color: #1e3a8a !important;
+}
+
+.search-help .border-info {
+    border-color: #1e3a8a !important;
+}
+
+/* Help modal code examples - use dark blue */
+.search-help .text-primary code {
+    color: #1e3a8a !important;
+}
+
+@media (max-width: 1199px) {
+    .search-container {
+        min-width: 250px;
+        margin-bottom: 1em;
+    }
+
+    .search-container .input-group {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 767px) {
+    .search-container {
+        min-width: 200px;
+    }
+}
+
+/* Hide search container on screens below 1500px */
+@media (max-width: 1499px) {
+    .search-container {
+        display: none !important;
+    }
 }

@@ -21,7 +21,6 @@
     <link rel="stylesheet" href="css/prism.min.css">
     <link rel="stylesheet" href="css/prism-line-numbers.min.css">
     <link rel="stylesheet" href="css/prism-line-highlight.min.css">
-
 </head>
 <body class="d-flex flex-column h-100">
 
@@ -60,6 +59,15 @@
                         <a class="nav-link" aria-current="page" href="https://github.com/parttimenerd/jfreventcollector">GitHub</a>
                     </li>
                 </ul>
+                <!-- Search field -->
+                <div class="search-container me-3">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="eventSearch" placeholder="Search events..." aria-label="Search events">
+                        <button class="btn btn-outline-secondary" type="button" id="searchInfoBtn" title="Search syntax help">
+                            <i class="bi bi-info-circle"></i>?
+                        </button>
+                    </div>
+                </div>
                 <div class="btn-group event-selector" role="group" title="Select new events">
                     {{#info}}
                     <input type="radio" class="btn-check" data-version="8" name="btn-all-events" id="btn-all-events" autocomplete="off" checked onchange="showVersions(8)">
@@ -169,17 +177,10 @@ $('.graal-only-badge').popover({
 });
 $(".popover-on").tooltip({ trigger: 'hover', placement: 'top' });
 new bootstrap.ScrollSpy(document.body, {target: '#toc'});
-$("details").each(function (i, el) {
-    el.addEventListener("toggle", function (e) {
-        if (e.target.open && e.target.tabAlready !== true) {
-            let div = e.target.querySelector("div");
-            if (div !== null) {
-                new bootstrap.Tab(div.id);
-            }
-        }
-    });
 });
-});
+
+// Initialize TOC - store reference for refreshing
+
 anchors.add();
 
 function shouldShow(jdks, graalOnly, jdkOnly) {
@@ -285,7 +286,7 @@ function showEvents() {
         let jdkOnly = el.dataset.jdkOnly === "true";
         let element = document.querySelector(".nav-link[href=\"#" + el.id + "\"]");
         if (shouldShow(jdks, graalOnly, jdkOnly)) {
-            font = "block";
+            //element.style.display = "block";
             element.classList.remove("hidden-toc-section");
         } else {
             element.classList.add("hidden-toc-section");
@@ -320,6 +321,967 @@ function toggleCodeContextButton() {
         el.open = !open;
     });
 }
+
+// Advanced Event Search Functionality
+window.searchState = {
+    query: '',
+    filters: {},
+    searchTimeout: null
+};
+
+// ========================================
+// SEARCH PATTERN DEFINITIONS
+// Each pattern contains all its functionality in one place:
+// - regex: pattern matching
+// - description: help text
+// - examples: usage examples
+// - parse: how to parse matches
+// - match: how to test against elements
+// ========================================
+
+// Helper function to handle positive and negative pattern matching
+function evaluatePatterns(patterns, testFunction) {
+    let positiveMatch = true;
+    let negativeMatch = true;
+
+    const positivePatterns = patterns.filter(p => !p.negate);
+    const negativePatterns = patterns.filter(p => p.negate);
+
+    if (positivePatterns.length > 0) {
+        positiveMatch = positivePatterns.some(testFunction);
+    }
+
+    if (negativePatterns.length > 0) {
+        negativeMatch = !negativePatterns.some(testFunction);
+    }
+
+    return positiveMatch && negativeMatch;
+}
+
+const searchPatterns = {
+    name: {
+        regex: /(!)?name(-sensitive)?:([^\s]+)/g,
+        description: "Match event name (supports * and ? wildcards)",
+        examples: ["name:*GC*", "name:Thread?roup", "name:JavaMonitorEnter", "name-sensitive:GCEvent", "!name:*Test*"],
+        usage: "Use wildcards to match event names. * matches any characters, ? matches single character. Add -sensitive for case-sensitive matching. Prefix with ! to exclude matches.",
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            caseSensitive: match.sensitive,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const eventName = eventElement.dataset.name;
+            if (!eventName) {
+                console.log('🔍 [SEARCH] No data-name attribute found');
+                return false;
+            }
+
+            const result = evaluatePatterns(patterns, patternObj =>
+                globMatch(patternObj.pattern, eventName, patternObj.caseSensitive)
+            );
+
+            console.log(`🔍 [SEARCH] Name filter: "${eventName}" vs patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    label: {
+        regex: /(!)?label:([^\s]+)/g,
+        description: "Match event labels/badges (experimental, deprecated, etc.)",
+        examples: ["label:experimental", "label:*enabled*", "label:deprecated", "!label:deprecated"],
+        usage: "Filter events by their status badges. Supports wildcards for partial matching. Prefix with ! to exclude matches.",
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const badges = eventElement.querySelectorAll('.badge');
+            const labelTexts = Array.from(badges).map(b => b.textContent.trim());
+
+            const result = evaluatePatterns(patterns, patternObj =>
+                labelTexts.some(label => globMatch(patternObj.pattern, label, false))
+            );
+
+            console.log(`🔍 [SEARCH] Label filter: found badges ${JSON.stringify(labelTexts)}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    jdk: {
+        regex: /(!)?jdk:(\d+)/g,
+        description: "Filter by JDK version",
+        examples: ["jdk:17", "jdk:21", "jdk:11", "!jdk:8"],
+        usage: "Show only events available in the specified JDK version. Prefix with ! to exclude specific versions.",
+
+        parse: (matches) => matches.map(match => ({
+            value: parseInt(match.value),
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const jdksData = eventElement.dataset.jdks;
+            if (!jdksData) {
+                console.log('🔍 [SEARCH] No data-jdks attribute found');
+                return false;
+            }
+            const eventJdks = jdksData.split(',').map(v => parseInt(v.trim()));
+
+            const result = evaluatePatterns(patterns, pattern => eventJdks.includes(pattern.value));
+
+            console.log(`🔍 [SEARCH] JDK filter: event JDKs ${JSON.stringify(eventJdks)}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    fields: {
+        regex: /(!)?fields(-sensitive)?:([^\s]+)/g,
+        description: "Events with specific fields (comma-separated)",
+        examples: ["fields:startTime,duration", "fields:stackTrace", "fields:thread", "fields-sensitive:Duration", "!fields:stackTrace"],
+        usage: "Filter events that contain all specified fields. Use comma to separate multiple fields. Add -sensitive for case-sensitive matching. Prefix with ! to exclude events with these fields.",
+
+        parse: (matches) => matches.flatMap(match =>
+            match.value.split(',').map(f => ({
+                pattern: f.trim(),
+                caseSensitive: match.sensitive,
+                negate: match.negate
+            }))
+        ),
+
+        match: (patterns, eventElement) => {
+            const fieldBadges = eventElement.querySelectorAll('.badge');
+            const availableFields = Array.from(fieldBadges).map(b => b.textContent.trim());
+
+            const result = evaluatePatterns(patterns, fieldObj =>
+                availableFields.some(available =>
+                    fieldObj.caseSensitive
+                        ? available.includes(fieldObj.pattern)
+                        : available.toLowerCase().includes(fieldObj.pattern.toLowerCase())
+                )
+            );
+
+            console.log(`🔍 [SEARCH] Fields filter: available ${JSON.stringify(availableFields)}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    graalvm: {
+        regex: /(!)?graalvm:(true|false|only|all)/g,
+        description: "Filter by GraalVM support (supports: true, false, only, all)",
+        examples: ["graalvm:true", "graalvm:false", "graalvm:only", "graalvm:all", "!graalvm:only"],
+        usage: "Show events by GraalVM support status. Use 'true' for any GraalVM support, 'only' for GraalVM-exclusive events, 'false' for non-GraalVM events, 'all' for any support level. Prefix with ! to exclude specific status.",
+
+        parse: (matches) => matches.map(match => ({
+            value: match.value,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const graalOnly = eventElement.dataset.graalOnly === 'true';
+            const jdkOnly = eventElement.dataset.jdkOnly === 'true';
+            const hasGraalVM = graalOnly || !jdkOnly; // Has GraalVM support if it's graal-only or not jdk-only
+
+            const result = evaluatePatterns(patterns, pattern => {
+                switch (pattern.value) {
+                    case 'true': return hasGraalVM;
+                    case 'false': return !hasGraalVM;
+                    case 'only': return graalOnly;
+                    case 'all': return true; // matches any event regardless of GraalVM status
+                    default: return false;
+                }
+            });
+
+            console.log(`🔍 [SEARCH] GraalVM filter: graal-only=${graalOnly}, jdk-only=${jdkOnly}, hasGraalVM=${hasGraalVM}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    config: {
+        regex: /(!)?config:([^\s]+)/g,
+        description: "Filter by configuration profile (supports wildcards)",
+        examples: ["config:default", "config:*profile*", "config:continuous", "!config:test"],
+        usage: "Filter events by their configuration profiles. Use wildcards for flexible matching. Prefix with ! to exclude matches.",
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const configBadges = eventElement.querySelectorAll('.badge.bg-success[title*="config"]');
+            const configNames = Array.from(configBadges).map(b =>
+                b.textContent.trim()
+            );
+
+            const result = evaluatePatterns(patterns, patternObj =>
+                configNames.some(config =>
+                    globMatch(patternObj.pattern, config, false)
+                )
+            );
+
+            console.log(`🔍 [SEARCH] Config filter: found configs ${JSON.stringify(configNames)}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    'config-only': {
+        regex: /(!)?config-only:([^\s]+)/g,
+        description: "Filter by events that only appear in specific configuration profiles",
+        examples: ["config-only:default", "config-only:*profile*", "!config-only:test"],
+        usage: "Filter events that are exclusively available in the specified configuration profiles. Use wildcards for flexible matching. Prefix with ! to exclude matches.",
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement) => {
+            const configBadges = eventElement.querySelectorAll('.badge.bg-success[title*="config"]');
+            const configNames = Array.from(configBadges).map(b =>
+                b.textContent.trim()
+            );
+
+            // For config-only, we need to check if the event appears ONLY in the specified config
+            const result = evaluatePatterns(patterns, patternObj => {
+                const matchingConfigs = configNames.filter(config =>
+                    globMatch(patternObj.pattern, config, false)
+                );
+                // Event is config-only if it has exactly one config and it matches the pattern
+                return configNames.length === 1 && matchingConfigs.length === 1;
+            });
+
+            console.log(`🔍 [SEARCH] Config-only filter: found configs ${JSON.stringify(configNames)}, patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    category: {
+        regex: /(!)?category(-sensitive)?:([^\s]+)/g,
+        description: "Filter by event category/section (supports wildcards)",
+        examples: ["category:Runtime", "category:*Memory*", "category:Threading", "category-sensitive:Runtime", "!category:Test"],
+        usage: "Filter events by their category section. Use wildcards to match multiple categories. Add -sensitive for case-sensitive matching. Prefix with ! to exclude matches.",
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            caseSensitive: match.sensitive,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement, fileContentMap) => {
+            const categoryName = eventElement.dataset.section;
+            if (!categoryName) {
+                console.log('🔍 [SEARCH] No data-section attribute found');
+                return false;
+            }
+
+            const result = evaluatePatterns(patterns, patternObj =>
+                globMatch(patternObj.pattern, categoryName, patternObj.caseSensitive)
+            );
+
+            console.log(`🔍 [SEARCH] Category filter: "${categoryName}" vs patterns ${JSON.stringify(patterns)} = ${result}`);
+            return result;
+        }
+    },
+
+    file: {
+        regex: /(!)?file(-sensitive)?:([^\s]+)/g,
+        description: "Filter by code context file paths (supports wildcards)",
+        examples: ["file:*.java", "file:*GC*", "file-sensitive:Thread", "!file:*test*"],
+        usage: "Filter events based on their code context file paths. Use wildcards to match file name patterns. Add -sensitive for case-sensitive matching. Prefix with ! to exclude matches.",
+        fileMatcher: true, // Flag to indicate this pattern requires file content
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            caseSensitive: match.sensitive,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement, fileContentMap) => {
+            // Extract code snippets from the event's code context section
+            const codeContextDetails = eventElement.querySelector('.code-context');
+            if (!codeContextDetails) {
+                console.log('🔍 [SEARCH] No code context found for event');
+                return patterns.every(p => p.negate); // If all patterns are negated, return true when no code context
+            }
+
+            // Get file path elements
+            const pathElements = codeContextDetails.querySelectorAll('.path-url');
+
+            if (pathElements.length === 0) {
+                console.log('🔍 [SEARCH] No file paths found in code context');
+                return patterns.every(p => p.negate); // If all patterns are negated, return true when no file paths
+            }
+
+            console.log('🔍 [SEARCH] File filter: checking', pathElements.length, 'file paths');
+
+            const result = evaluatePatterns(patterns, patternObj => {
+                // Check file paths
+                for (const pathElement of pathElements) {
+                    const path = pathElement.textContent || '';
+                    if (globMatch(patternObj.pattern, path, patternObj.caseSensitive)) {
+                        console.log(`🔍 [SEARCH] File filter: file path "${path}" matches pattern "${patternObj.pattern}"`);
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            console.log(`🔍 [SEARCH] File filter result:`, result);
+            return result;
+        }
+    },
+
+    snippet: {
+        regex: /(!)?snippet(-sensitive)?:([^\s]+)/g,
+        description: "Filter by code snippet content (supports wildcards)",
+        examples: ["snippet:*allocation*", "snippet:GC", "snippet-sensitive:Thread", "!snippet:*test*"],
+        usage: "Filter events based on their code snippet content. Use wildcards to match content patterns. Add -sensitive for case-sensitive matching. Prefix with ! to exclude matches.",
+        fileMatcher: true, // Flag to indicate this pattern requires file content
+
+        parse: (matches) => matches.map(match => ({
+            pattern: match.value,
+            caseSensitive: match.sensitive,
+            negate: match.negate
+        })),
+
+        match: (patterns, eventElement, fileContentMap) => {
+            // Extract code snippets from the event's code context section
+            const codeContextDetails = eventElement.querySelector('.code-context');
+            if (!codeContextDetails) {
+                console.log('🔍 [SEARCH] No code context found for event');
+                return patterns.every(p => p.negate); // If all patterns are negated, return true when no code context
+            }
+
+            // Get all code snippets within the code context
+            const codeSnippets = codeContextDetails.querySelectorAll('code');
+
+            if (codeSnippets.length === 0) {
+                console.log('🔍 [SEARCH] No code snippets found in code context');
+                return patterns.every(p => p.negate); // If all patterns are negated, return true when no snippets
+            }
+
+            console.log('🔍 [SEARCH] Snippet filter: checking', codeSnippets.length, 'code snippets');
+
+            const result = evaluatePatterns(patterns, patternObj => {
+                // Check code snippet content
+                for (const codeElement of codeSnippets) {
+                    const content = codeElement.textContent || '';
+                    if (globMatch(patternObj.pattern, content, patternObj.caseSensitive)) {
+                        console.log(`🔍 [SEARCH] Snippet filter: code snippet matches pattern "${patternObj.pattern}"`);
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            console.log(`🔍 [SEARCH] Snippet filter result:`, result);
+            return result;
+        }
+    }
+};
+// ========================================
+// SEARCH CORE FUNCTIONALITY
+// ========================================
+
+function parseSearchQuery(query) {
+    console.log('🔍 [SEARCH] Parsing query:', query);
+    const filters = {};
+    let textSearch = query;
+
+    // Parse each search pattern
+    Object.entries(searchPatterns).forEach(([key, config]) => {
+        const matches = [];
+        let match;
+        const regex = new RegExp(config.regex.source, 'g');
+
+        while ((match = regex.exec(query)) !== null) {
+            let negate = false;
+            let sensitive = false;
+            let value;
+
+            // Handle different regex patterns based on their structure
+            if (key === 'jdk' || key === 'graalvm') {
+                // Simple patterns: (!)?pattern:(value)
+                negate = match[1] === '!';
+                value = match[2];
+            } else if (key === 'label' || key === 'config' || key === 'config-only') {
+                // Simple patterns without -sensitive: (!)?pattern:(value)
+                negate = match[1] === '!';
+                value = match[2];
+            } else if (key === 'file' || key === 'snippet') {
+                // File and snippet patterns with optional -sensitive: (!)?pattern(-sensitive)?:(value)
+                negate = match[1] === '!';
+                sensitive = match[2] === '-sensitive';
+                value = match[3];
+            } else {
+                // Complex patterns with optional -sensitive: (!)?pattern(-sensitive)?:(value)
+                negate = match[1] === '!';
+                sensitive = match[2] === '-sensitive';
+                value = match[3];
+            }
+
+            matches.push({
+                value: value,
+                sensitive: sensitive,
+                negate: negate
+            });
+
+            textSearch = textSearch.replace(match[0], '').trim();
+            console.log(`🔍 [SEARCH] Found ${key} filter:`, {
+                value: value,
+                sensitive: sensitive,
+                negate: negate
+            });
+        }
+
+        if (matches.length > 0) {
+            filters[key] = config.parse(matches);
+            console.log(`🔍 [SEARCH] Parsed ${key} filter:`, filters[key]);
+        }
+    });
+
+    // Clean up text search
+    textSearch = textSearch.replace(/\s+/g, ' ').trim();
+
+    console.log('🔍 [SEARCH] Final parsed result:', { textSearch, filters });
+    return { textSearch, filters };
+}
+
+function globMatch(pattern, text, caseSensitive = false) {
+    if (!pattern || !text) {
+        console.log('🔍 [SEARCH] globMatch: empty pattern or text', { pattern, text });
+        return false;
+    }
+
+    // Convert glob pattern to regex
+    const regexPattern = pattern
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars except * and ?
+        .replace(/\*/g, '.*') // * matches any characters
+        .replace(/\?/g, '.'); // ? matches single character
+
+    const regex = new RegExp(regexPattern, caseSensitive ? '' : 'i');
+    const result = regex.test(text);
+    console.log(`🔍 [SEARCH] globMatch: "${pattern}" vs "${text}" = ${result}`);
+    return result;
+}
+
+function matchesSearchCriteria(eventElement, textSearch, filters, fileContentMap = null) {
+    console.log('🔍 [SEARCH] Checking event element:', eventElement);
+
+    // Text search using data attributes for better performance
+    if (textSearch) {
+        console.log('🔍 [SEARCH] Performing text search for:', textSearch);
+
+        // Use data attributes first (much faster than DOM traversal)
+        const eventName = eventElement.dataset.name || '';
+        const eventDescription = eventElement.dataset.description || '';
+        const eventSection = eventElement.dataset.section || '';
+
+        const searchLower = textSearch.toLowerCase();
+
+        console.log('🔍 [SEARCH] Event data:', {
+            name: eventName,
+            description: eventDescription.substring(0, 50) + '...',
+            section: eventSection
+        });
+
+        // Check data attributes first
+        const nameMatch = eventName.toLowerCase().includes(searchLower);
+        const descriptionMatch = eventDescription.toLowerCase().includes(searchLower);
+        const sectionMatch = eventSection.toLowerCase().includes(searchLower);
+
+        console.log('🔍 [SEARCH] Data attribute matches:', {
+            name: nameMatch,
+            description: descriptionMatch,
+            section: sectionMatch
+        });
+
+        // If no match in data attributes, fall back to full text search
+        let contentMatch = false;
+        if (!nameMatch && !descriptionMatch && !sectionMatch) {
+            console.log('🔍 [SEARCH] Falling back to full content search');
+            const eventContent = eventElement.textContent.toLowerCase();
+            contentMatch = eventContent.includes(searchLower);
+            console.log('🔍 [SEARCH] Full content match:', contentMatch);
+        }
+
+        if (!nameMatch && !descriptionMatch && !sectionMatch && !contentMatch) {
+            console.log('🔍 [SEARCH] Text search failed for event:', eventName);
+            return false;
+        }
+
+        console.log('🔍 [SEARCH] Text search passed for event:', eventName);
+    }
+
+    // Apply all filter patterns
+    for (const [filterKey, filterValue] of Object.entries(filters)) {
+        console.log(`🔍 [SEARCH] Applying ${filterKey} filter:`, filterValue);
+        const pattern = searchPatterns[filterKey];
+        if (pattern) {
+            // Pass fileContentMap to patterns that have fileMatcher property
+            const matchResult = pattern.fileMatcher
+                ? pattern.match(filterValue, eventElement, fileContentMap)
+                : pattern.match(filterValue, eventElement);
+            console.log(`🔍 [SEARCH] ${filterKey} filter result:`, matchResult);
+            if (!matchResult) {
+                console.log(`🔍 [SEARCH] ${filterKey} filter failed for event`);
+                return false;
+            }
+        }
+    }
+
+    console.log('🔍 [SEARCH] Event matches all criteria');
+    return true;
+}
+
+function performSearch(query) {
+    console.log('🔍 [SEARCH] Starting search with query:', query);
+    const startTime = performance.now();
+
+    const { textSearch, filters } = parseSearchQuery(query);
+
+    // Store current search state
+    window.searchState.query = query;
+    window.searchState.filters = filters;
+    console.log('🔍 [SEARCH] Updated search state:', window.searchState);
+
+    // Get all event elements
+    const eventElements = document.querySelectorAll('.event');
+    const sectionElements = document.querySelectorAll('h1.section-header');
+
+    console.log(`🔍 [SEARCH] Found ${eventElements.length} events and ${sectionElements.length} sections`);
+
+    let totalVisible = 0;
+
+    eventElements.forEach((eventEl, index) => {
+        const eventHeader = eventEl.previousElementSibling;
+        const matches = matchesSearchCriteria(eventEl, textSearch, filters);
+
+        console.log(`🔍 [SEARCH] Event ${index + 1}/${eventElements.length} matches:`, matches);
+        let tocElement = document.querySelector(".nav-link[href=\"#" + eventHeader.id + "\"]");
+
+        if (matches) {
+            eventEl.style.display = 'block';
+            if (eventHeader && eventHeader.classList.contains('event-header')) {
+                eventHeader.style.display = 'block';
+            }
+            totalVisible++;
+            tocElement.classList.remove("hidden-subtoc-section");
+        } else {
+            eventEl.style.display = 'none';
+            if (eventHeader && eventHeader.classList.contains('event-header')) {
+                eventHeader.style.display = 'none';
+            }
+            tocElement.classList.add("hidden-subtoc-section");
+        }
+    });
+
+    console.log(`🔍 [SEARCH] Total visible events: ${totalVisible}/${eventElements.length}`);
+
+    // Hide/show sections based on whether they have visible events and update sidebar
+    let visibleSections = 0;
+    sectionElements.forEach((section, index) => {
+        // Count visible events in this section more accurately
+        const allEvents = section.parentNode.querySelectorAll('.event');
+        const visibleEvents = Array.from(allEvents).filter(event => {
+            const style = window.getComputedStyle(event);
+            return style.display !== 'none';
+        });
+
+        console.log(`🔍 [SEARCH] Section ${index + 1} "${section.id}" has ${visibleEvents.length}/${allEvents.length} visible events`);
+        let tocElement = document.querySelector(".nav-link[href=\"#" + section.id + "\"]");
+
+        if (visibleEvents.length > 0) {
+            // Show section
+            section.style.display = 'block';
+            visibleSections++;
+            tocElement.classList.remove("hidden-toc-section");
+        } else {
+            // Hide section
+            section.style.display = 'none';
+            tocElement.classList.add("hidden-toc-section");
+        }
+    });
+
+    // Hide/show section headers in TOC based on visible sections
+   /* let headers = document.querySelectorAll("h1.section-header");
+    headers.forEach(function (el) {
+        let element = document.querySelector(".nav-link[href=\"#" + el.id + "\"]");
+        if (element) {
+            // Check if the section containing this header has any visible events
+            const parentSection = el.closest('.section');
+            if (parentSection) {
+                const visibleEventsInSection = Array.from(parentSection.querySelectorAll('.event')).filter(event => {
+                    const style = window.getComputedStyle(event);
+                    return style.display !== 'none';
+                });
+
+                if (visibleEventsInSection.length > 0) {
+                   // element.style.display = "block";
+                    element.classList.remove("hidden-toc-section");
+                    console.log(`🔍 [SEARCH] Showing TOC link for section: ${el.id}`);
+                } else {
+                    element.style.display = 'none';
+                    element.classList.add("hidden-toc-section");
+                    console.log(`🔍 [SEARCH] Hiding TOC link for section: ${el.id}`);
+                }
+            }
+        }
+    });*/
+
+    console.log(`🔍 [SEARCH] Total visible sections: ${visibleSections}/${sectionElements.length}`);
+
+    // Update search results indicator
+    updateSearchResultsIndicator(totalVisible, eventElements.length);
+
+    // Update URL state
+    if (query.trim()) {
+        pushURLState('search', query);
+        console.log('🔍 [SEARCH] Updated URL with search query');
+    } else {
+        let url = new URL(window.location.href);
+        url.searchParams.delete('search');
+        window.history.pushState({}, "", url);
+        console.log('🔍 [SEARCH] Removed search query from URL');
+    }
+
+    const endTime = performance.now();
+    console.log(`🔍 [SEARCH] Search completed in ${(endTime - startTime).toFixed(2)}ms`);
+}
+
+function clearSearch() {
+    console.log('🔍 [SEARCH] Clearing search');
+
+    // Show all events, headers, and sections
+    const eventElements = document.querySelectorAll('.event, .event-header, .section');
+    eventElements.forEach(el => {
+        el.style.display = 'block';
+    });
+
+    console.log('🔍 [SEARCH] Restored all sections and sidebar links');
+
+    // Clear search state
+    window.searchState = { query: '', filters: {}, searchTimeout: null };
+    console.log('🔍 [SEARCH] Cleared search state');
+
+    // Clear search results indicator
+    updateSearchResultsIndicator(null, null);
+}
+
+function updateSearchResultsIndicator(visible, total) {
+    console.log(`🔍 [SEARCH] Updating results indicator: ${visible}/${total}`);
+    let indicator = document.getElementById('searchResultsIndicator');
+
+    if (!indicator) {
+        // Create indicator if it doesn't exist
+        indicator = document.createElement('div');
+        indicator.id = 'searchResultsIndicator';
+        indicator.className = 'search-results-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        `;
+        document.body.appendChild(indicator);
+        console.log('🔍 [SEARCH] Created search results indicator');
+    }
+
+    if (visible !== null && total !== null) {
+        indicator.textContent = `${visible} of ${total} events`;
+        indicator.style.opacity = '1';
+    } else {
+        indicator.style.opacity = '0';
+    }
+}
+
+// ========================================
+// SEARCH HELP SYSTEM
+// ========================================
+
+function generateSearchHelpContent() {
+    let helpContent = `
+        <div class="search-help">
+            <!-- Quick Reference Section -->
+            <div class="quick-reference mb-4">
+                <h4><i class="fas fa-rocket"></i> Quick Reference</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-primary h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-primary">Common Searches</h6>
+                                <ul class="list-unstyled small">
+                                    <li><code>garbage collection</code> - Text search</li>
+                                    <li><code>name:*GC*</code> - Name with wildcards</li>
+                                    <li><code>jdk:17</code> - JDK 17 events</li>
+                                    <li><code>graalvm:true</code> - GraalVM supported</li>
+                                    <li><code>label:experimental</code> - Experimental events</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-success h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-success">Advanced Tips</h6>
+                                <ul class="list-unstyled small">
+                                    <li><strong>Combine:</strong> <code>name:*GC* jdk:17</code></li>
+                                    <li><strong>Exclude:</strong> <code>!label:deprecated</code></li>
+                                    <li><strong>Case-sensitive:</strong> <code>name-sensitive:GCEvent</code></li>
+                                    <li><strong>Wildcards:</strong> <code>*</code> (any), <code>?</code> (single)</li>
+                                    <li><strong>Multiple fields:</strong> <code>fields:duration,thread</code></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Patterns Section -->
+            <div class="search-patterns">
+                <h4><i class="fas fa-search"></i> Search Patterns</h4>`;
+
+    // Generate help content from pattern definitions with improved formatting
+    Object.entries(searchPatterns).forEach(([key, config]) => {
+        const displayName = key.replace('-', '-').split('-').map(word =>
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+
+        helpContent += `
+            <div class="search-pattern-help mb-4 border-start border-3 border-info ps-3">
+                <h5 class="text-info mb-2">
+                    <i class="fas fa-filter me-2"></i>${displayName} Search
+                </h5>
+                <p class="mb-2">${config.description}</p>
+                <div class="alert alert-light mb-2">
+                    <small class="text-muted">${config.usage}</small>
+                </div>
+                <div class="examples">
+                    <strong class="text-dark">Examples:</strong>
+                    <div class="ms-3 mt-1">`;
+
+        config.examples.forEach(example => {
+            helpContent += `<span class="badge bg-light text-dark me-2 mb-1 font-monospace">${example}</span>`;
+        });
+
+        helpContent += `
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    helpContent += `
+            </div>
+
+            <!-- Complex Examples Section -->
+            <div class="complex-examples mt-4">
+                <h4><i class="fas fa-lightbulb"></i> Complex Search Examples</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-secondary">Performance Analysis</h6>
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <code class="text-primary">name:*GC* jdk:17 fields:duration</code>
+                                <br><small class="text-muted">GC events in JDK 17 with duration field</small>
+                            </li>
+                            <li class="mb-2">
+                                <code class="text-primary">category:*Memory* !label:deprecated</code>
+                                <br><small class="text-muted">Memory events excluding deprecated ones</small>
+                            </li>
+                            <li class="mb-2">
+                                <code class="text-primary">fields:stackTrace,thread graalvm:true</code>
+                                <br><small class="text-muted">GraalVM events with stack traces and thread info</small>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-secondary">Development & Debugging</h6>
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <code class="text-primary">label:experimental category:Runtime</code>
+                                <br><small class="text-muted">Experimental runtime events</small>
+                            </li>
+                            <li class="mb-2">
+                                <code class="text-primary">config:default !graalvm:only</code>
+                                <br><small class="text-muted">Default config events not GraalVM-only</small>
+                            </li>
+                            <li class="mb-2">
+                                <code class="text-primary">name-sensitive:*Thread* jdk:21</code>
+                                <br><small class="text-muted">Case-sensitive thread events in JDK 21</small>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features Section -->
+            <div class="features-help mt-4">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h6 class="card-title text-warning">
+                                    <i class="fas fa-magic"></i> Wildcards
+                                </h6>
+                                <ul class="list-unstyled small">
+                                    <li><code>*</code> - Matches any number of characters</li>
+                                    <li><code>?</code> - Matches exactly one character</li>
+                                    <li><code>name:Thread*Event</code> - Starts with "Thread", ends with "Event"</li>
+                                    <li><code>name:*GC?Event</code> - Contains "GC" + single char + "Event"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h6 class="card-title text-info">
+                                    <i class="fas fa-font"></i> Case Sensitivity
+                                </h6>
+                                <ul class="list-unstyled small">
+                                    <li><strong>Default:</strong> Case-insensitive</li>
+                                    <li><strong>Sensitive:</strong> Add <code>-sensitive</code> suffix</li>
+                                    <li><code>name:gcevent</code> - Matches "GCEvent"</li>
+                                    <li><code>name-sensitive:GCEvent</code> - Exact case only</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-danger">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger">
+                                    <i class="fas fa-ban"></i> Exclusions
+                                </h6>
+                                <ul class="list-unstyled small">
+                                    <li><strong>Exclude:</strong> Prefix with <code>!</code></li>
+                                    <li><code>!label:deprecated</code> - Hide deprecated</li>
+                                    <li><code>!jdk:8</code> - Exclude JDK 8 events</li>
+                                    <li><code>!name:*Test*</code> - Hide test events</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    `;
+
+    return helpContent;
+}
+
+function showSearchHelp() {
+    const helpContent = generateSearchHelpContent();
+
+    // Create and show Bootstrap modal
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'searchHelpModal';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Search Help</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    ${helpContent}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+
+    // Clean up modal after hiding
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// ========================================
+// SEARCH INITIALIZATION AND EVENT HANDLING
+// ========================================
+
+// Initialize search functionality
+$(function() {
+    const searchInput = document.getElementById('eventSearch');
+    const searchInfoBtn = document.getElementById('searchInfoBtn');
+
+    if (!searchInput || !searchInfoBtn) {
+        console.warn('Search elements not found - search functionality disabled');
+        return;
+    }
+
+    // Get initial search from URL and apply it
+    const initialSearch = getURLState('search', '');
+    if (initialSearch) {
+        console.log('🔍 [SEARCH] Restoring search from URL:', initialSearch);
+        searchInput.value = initialSearch;
+        // Use setTimeout to ensure the page is fully loaded before performing search
+        setTimeout(() => {
+            performSearch(initialSearch);
+        }, 100);
+    }
+
+    // Search only on Enter key press
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = this.value.trim();
+            performSearch(query);
+        }
+    });
+
+    // Show help modal
+    searchInfoBtn.addEventListener('click', showSearchHelp);
+
+    // Clear search when other filters are used
+    const originalShowEvents = window.showEvents;
+    if (originalShowEvents) {
+        window.showEvents = function() {
+            // If there's an active search, clear it when version/variant filters are used
+            if (window.searchState.query) {
+                console.log('🔍 [SEARCH] Clearing search due to version/variant filter change');
+                searchInput.value = '';
+                clearSearch();
+                let url = new URL(window.location.href);
+                url.searchParams.delete('search');
+                window.history.pushState({}, "", url);
+            }
+            originalShowEvents();
+        };
+    }
+
+    // Handle browser back/forward navigation
+    window.addEventListener('popstate', function() {
+        const searchFromURL = getURLState('search', '');
+        console.log('🔍 [SEARCH] Handling popstate, search from URL:', searchFromURL);
+        if (searchFromURL !== searchInput.value) {
+            searchInput.value = searchFromURL;
+            if (searchFromURL) {
+                performSearch(searchFromURL);
+            } else {
+                clearSearch();
+            }
+        }
+    });
+
+    console.log('🔍 [SEARCH] Search functionality initialized');
+});
 </script>
 {{#info.goatCounterUrls}}
 <script data-goatcounter="{.}/count"

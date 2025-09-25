@@ -3,7 +3,7 @@
     {{#entries}}
 
         <h2 class="event-header hideable-part" data-jdks="{{value.jdks}}" data-graal-only="{{value.inGraalOnly}}" data-jdk-only="{{value.inJDKOnly}}">{{value.name}}</h2>
-        <div class="event hideable-part" data-jdks="{{value.jdks}}" data-graal-only="{{value.inGraalOnly}}" data-jdk-only="{{value.inJDKOnly}}">
+        <div class="event hideable-part" data-jdks="{{value.jdks}}" data-graal-only="{{value.inGraalOnly}}" data-jdk-only="{{value.inJDKOnly}}" data-name="{{value.name}}" data-description="{{value.description}}" data-section="{{../title}}">
             {{{value.inner}}}
         </div>
     {{/entries}}
