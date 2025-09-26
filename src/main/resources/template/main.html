@@ -1472,6 +1472,7 @@ function performSearch(query) {
     const sectionElements = document.querySelectorAll('h1.section-header');
 
     let totalVisible = 0;
+    let firstVisibleElement = null;
 
     eventElements.forEach((eventEl, index) => {
         const eventHeader = eventEl.previousElementSibling;
@@ -1486,6 +1487,11 @@ function performSearch(query) {
             }
             totalVisible++;
             tocElement.classList.remove("hidden-subtoc-section");
+            
+            // Store the first visible element
+            if (!firstVisibleElement) {
+                firstVisibleElement = eventHeader || eventEl;
+            }
         } else {
             eventEl.style.display = 'none';
             if (eventHeader && eventHeader.classList.contains('event-header')) {
@@ -1533,6 +1539,12 @@ function performSearch(query) {
 
     const endTime = performance.now();
     console.log(`🔍 [SEARCH] Completed in ${(endTime - startTime).toFixed(2)}ms - ${totalVisible}/${eventElements.length} events visible`);
+    
+    // Return information about the search results
+    return {
+        totalVisible: totalVisible,
+        firstVisibleElement: firstVisibleElement
+    };
 }
 
 function clearSearch() {
@@ -2834,7 +2846,24 @@ $(function() {
             const query = this.value.trim();
             if (query) {
                 window.searchSuggestions.saveSearch(query);
-                performSearch(query);
+                const searchResults = performSearch(query);
+                
+                // If there are results, scroll to the first visible element
+                if (searchResults && searchResults.totalVisible > 0 && searchResults.firstVisibleElement) {
+                    setTimeout(() => {
+                        // Calculate offset to account for fixed navbar (approximately 100px based on margin-top)
+                        const navbar = document.querySelector('.navbar.fixed-top');
+                        const navbarHeight = navbar ? navbar.offsetHeight + 20 : 100; // 20px extra padding
+                        
+                        const elementRect = searchResults.firstVisibleElement.getBoundingClientRect();
+                        const offsetTop = elementRect.top + window.pageYOffset - navbarHeight;
+                        
+                        window.scrollTo({
+                            top: offsetTop,
+                            behavior: 'smooth'
+                        });
+                    }, 100); // Small delay to ensure DOM updates are complete
+                }
             } else {
                 // Show all events when search field is empty
                 clearSearch();
