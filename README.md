@@ -66,8 +66,8 @@ you agree to abide by its [Code of Conduct](https://github.com/SAP/.github/blob/
 
 TODO
 ----
-- when an input matches an event exactly, focus on that event directly
 - show all the types that an event depends on
+
 
 License
 -------

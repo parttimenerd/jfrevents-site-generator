@@ -1457,6 +1457,135 @@ function evaluateTerm(term, eventElement, fileContentMap) {
     return false;
 }
 
+// Function to collect type dependencies from visible events
+function collectDependentTypes() {
+    const dependentTypeLinks = new Set();
+    
+    // Get all visible events (both explicitly shown and those not hidden)
+    const visibleEvents = Array.from(document.querySelectorAll('.event')).filter(event => {
+        const style = window.getComputedStyle(event);
+        return style.display !== 'none';
+    });
+    
+    console.log('🔍 [TYPES] Checking', visibleEvents.length, 'visible events for type dependencies');
+    
+    // First, collect direct type dependencies from visible events
+    visibleEvents.forEach(event => {
+        // Find field tables within this event
+        const fieldTables = event.querySelectorAll('.field-table');
+        
+        fieldTables.forEach(table => {
+            // Find all type links in the field table
+            const typeLinks = table.querySelectorAll('a[href^="#"]');
+            
+            typeLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    const typeId = href.substring(1); // Remove the '#'
+                    if (typeId) {
+                        dependentTypeLinks.add(typeId);
+                        console.log('🔍 [TYPES] Found type dependency:', typeId);
+                    }
+                }
+            });
+        });
+    });
+    
+    // Now recursively collect dependencies from the types themselves
+    const allDependencies = new Set(dependentTypeLinks);
+    const processedTypes = new Set();
+    
+    // Process types in waves to avoid infinite loops
+    let hasNewTypes = true;
+    let maxIterations = 5; // Limit iterations to prevent infinite loops
+    let iteration = 0;
+    
+    while (hasNewTypes && iteration < maxIterations) {
+        hasNewTypes = false;
+        iteration++;
+        
+        // Get types that haven't been processed yet
+        const typesToProcess = Array.from(allDependencies).filter(id => !processedTypes.has(id));
+        
+        if (typesToProcess.length === 0) {
+            break;
+        }
+        
+        console.log(`🔍 [TYPES] Processing iteration ${iteration}, checking ${typesToProcess.length} types`);
+        
+        typesToProcess.forEach(currentTypeId => {
+            if (processedTypes.has(currentTypeId)) {
+                return;
+            }
+            
+            processedTypes.add(currentTypeId);
+            
+            // Find the type element with this ID
+            const typeElement = document.getElementById(currentTypeId);
+            if (typeElement) {
+                // Look for field tables within this type
+                const typeFieldTables = typeElement.querySelectorAll('.field-table');
+                
+                typeFieldTables.forEach(table => {
+                    // Find all type links in this type's field table
+                    const nestedTypeLinks = table.querySelectorAll('a[href^="#"]');
+                    
+                    nestedTypeLinks.forEach(link => {
+                        const href = link.getAttribute('href');
+                        if (href && href.startsWith('#')) {
+                            const nestedTypeId = href.substring(1);
+                            if (nestedTypeId && !allDependencies.has(nestedTypeId)) {
+                                allDependencies.add(nestedTypeId);
+                                hasNewTypes = true;
+                                console.log('🔍 [TYPES] Found nested type dependency:', nestedTypeId);
+                            }
+                        }
+                    });
+                });
+            }
+        });
+    }
+    
+    if (iteration >= maxIterations) {
+        console.warn('🔍 [TYPES] Reached maximum iterations, stopping type dependency collection to prevent infinite loops');
+    }
+    
+    console.log('🔍 [TYPES] Total type dependencies found:', allDependencies.size);
+    return Array.from(allDependencies);
+}
+
+// Function to show/hide dependent types based on search results
+function showDependentTypes(dependentTypeIds, hasVisibleEvents) {
+    // Find all possible type elements using multiple selectors
+    const allTypes = Array.from(document.querySelectorAll(".event-header"));
+    
+    if (dependentTypeIds.length === 0) {
+        console.log('🔍 [TYPES] No dependent types found');
+        return;
+    }
+    console.log('🔍 [TYPES] Showing dependent types: ', dependentTypeIds);
+    
+    let shownTypes = 0;
+    let hiddenTypes = 0;
+    
+    allTypes.forEach(typeEl => {        
+        const typeId = typeEl.id || typeEl.dataset.id || typeEl.getAttribute('id');
+        const typeHeader = typeEl.previousElementSibling;
+        
+        if (typeId && dependentTypeIds.includes(typeId)) {
+            // Show this type as it's referenced by visible events
+            typeEl.style.display = 'block';
+            typeHeader.style.display = 'block';
+            
+            shownTypes++;
+            console.log('🔍 [TYPES] Showing dependent type:', typeId);
+        }
+    });
+    
+    console.log(`🔍 [TYPES] Processing complete: ${shownTypes} types shown, ${hiddenTypes} types hidden`);
+    console.log('🔍 [TYPES] Dependent type IDs:', dependentTypeIds);
+}
+
 function performSearch(query) {
     const startTime = performance.now();
 
@@ -1557,6 +1686,10 @@ function performSearch(query) {
 
     // Update search results indicator
     updateSearchResultsIndicator(totalVisible, eventElements.length);
+
+    // Show dependent types based on visible events
+    const dependentTypeIds = collectDependentTypes();
+    showDependentTypes(dependentTypeIds, totalVisible > 0);
 
     // Update URL state
     if (query.trim()) {
@@ -3003,16 +3136,13 @@ $(function() {
             
             // Perform search (or show all events if empty) only when no suggestion was selected
             const query = this.value.trim();
-            if (query) {
+          
                 window.searchSuggestions.saveSearch(query);
                 const searchResults = performSearch(query);
                 
                 // If there are results, scroll to exact match or first visible element
                 scrollToSearchResult(searchResults, 'Enter key search');
-            } else {
-                // Show all events when search field is empty
-                clearSearch();
-            }
+           
             
             // Hide suggestions and keep focus on search field
             hideSuggestions();
