@@ -1473,6 +1473,7 @@ function performSearch(query) {
 
     let totalVisible = 0;
     let firstVisibleElement = null;
+    let exactMatchElement = null;
 
     eventElements.forEach((eventEl, index) => {
         const eventHeader = eventEl.previousElementSibling;
@@ -1491,6 +1492,35 @@ function performSearch(query) {
             // Store the first visible element
             if (!firstVisibleElement) {
                 firstVisibleElement = eventHeader || eventEl;
+            }
+            
+            // Check for exact matches when doing name or full-text search
+            if (!exactMatchElement && textSearch && textSearch.trim()) {
+                const eventName = eventEl.dataset.name || '';
+                const searchTerm = textSearch.trim().toLowerCase();
+                
+                // Check for exact name match (case-insensitive)
+                if (eventName.toLowerCase() === searchTerm) {
+                    exactMatchElement = eventHeader || eventEl;
+                }
+                // Check for exact match in event content if no name match yet
+                else if (!exactMatchElement) {
+                    // Check if the search term appears as a complete word in the event content
+                    const eventContent = eventEl.textContent || '';
+                    
+                    // Use word boundary regex to find exact word matches
+                    try {
+                        const wordBoundaryRegex = new RegExp('\\b' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+                        if (wordBoundaryRegex.test(eventContent)) {
+                            exactMatchElement = eventHeader || eventEl;
+                        }
+                    } catch (e) {
+                        // Fallback to simple includes if regex fails (e.g., invalid regex characters)
+                        if (eventContent.toLowerCase().includes(searchTerm)) {
+                            exactMatchElement = eventHeader || eventEl;
+                        }
+                    }
+                }
             }
         } else {
             eventEl.style.display = 'none';
@@ -1543,7 +1573,8 @@ function performSearch(query) {
     // Return information about the search results
     return {
         totalVisible: totalVisible,
-        firstVisibleElement: firstVisibleElement
+        firstVisibleElement: firstVisibleElement,
+        exactMatchElement: exactMatchElement
     };
 }
 
@@ -1590,6 +1621,46 @@ function updateSearchResultsIndicator(visible, total) {
         indicator.style.opacity = '1';
     } else {
         indicator.style.opacity = '0';
+    }
+}
+
+// Helper function to scroll to search results with exact match prioritization
+function scrollToSearchResult(searchResults, context = '') {
+    if (!searchResults || !searchResults.totalVisible || searchResults.totalVisible === 0) {
+        return;
+    }
+    
+    // Prioritize exact match, fall back to first visible element
+    const targetElement = searchResults.exactMatchElement || searchResults.firstVisibleElement;
+    
+    if (targetElement && typeof targetElement.getBoundingClientRect === 'function') {
+        setTimeout(() => {
+            try {
+                // Calculate offset to account for fixed navbar
+                const navbar = document.querySelector('.navbar.fixed-top');
+                const navbarHeight = navbar ? navbar.offsetHeight + 20 : 100; // 20px extra padding
+                
+                const elementRect = targetElement.getBoundingClientRect();
+                const offsetTop = elementRect.top + window.pageYOffset - navbarHeight;
+                
+                // Ensure we don't scroll to negative positions
+                const scrollTop = Math.max(0, offsetTop);
+                
+                window.scrollTo({
+                    top: scrollTop,
+                    behavior: 'smooth'
+                });
+                
+                // Log what we're scrolling to for debugging
+                if (searchResults.exactMatchElement) {
+                    console.log(`🎯 [SEARCH] ${context} - scrolling to exact match`);
+                } else {
+                    console.log(`🔍 [SEARCH] ${context} - scrolling to first visible element`);
+                }
+            } catch (error) {
+                console.warn('🔍 [SEARCH] Error during scroll:', error);
+            }
+        }, context.includes('URL') ? 200 : 100); // Slightly longer delay when restoring from URL
     }
 }
 
@@ -2681,6 +2752,16 @@ function showSearchSuggestions(input, suggestions) {
         
         // Trigger input event to update suggestions for context-aware help
         searchInput.dispatchEvent(new Event('input'));
+        
+        // Check if the resulting query has valid syntax and perform search if it does
+        if (hasValidSearchSyntax(finalText.trim())) {
+            console.log('🔍 [SEARCH] Auto-executing search after suggestion application:', finalText.trim());
+            window.searchSuggestions.saveSearch(finalText.trim());
+            const searchResults = performSearch(finalText.trim());
+            scrollToSearchResult(searchResults, 'Auto-suggestion search');
+        } else {
+            console.log('🔍 [SEARCH] Query after suggestion not ready for search:', finalText.trim());
+        }
     }, 0);
     
     hideSuggestions();
@@ -2689,6 +2770,79 @@ function showSearchSuggestions(input, suggestions) {
 function hideSuggestions() {
     const suggestionsPanel = document.getElementById('searchSuggestions');
     suggestionsPanel.classList.add('d-none');
+}
+
+// Helper function to check if a search query has valid syntax
+function hasValidSearchSyntax(query) {
+    if (!query || !query.trim()) {
+        return false;
+    }
+    
+    const trimmedQuery = query.trim();
+    
+    try {
+        // Check for incomplete patterns that shouldn't trigger search
+        const incompletePatterns = [
+            /\w+:$/, // Ends with pattern prefix but no value (e.g., "name:")
+            /\|\|$/, // Ends with OR operator
+            /^\($/, // Only opening parenthesis
+            /\($/, // Ends with opening parenthesis
+            /^!$/, // Just negation operator
+            /!\s*$/, // Negation operator followed by whitespace only
+            /^!\w+:$/, // Negated pattern without value (e.g., "!name:")
+        ];
+        
+        // If query matches any incomplete pattern, it's not ready for search
+        for (const pattern of incompletePatterns) {
+            if (pattern.test(trimmedQuery)) {
+                return false;
+            }
+        }
+        
+        // Try to parse the query
+        const { textSearch, filters, expressionTree } = parseSearchQuery(trimmedQuery);
+        
+        // Check if we have meaningful content
+        const hasTextSearch = textSearch && textSearch.trim();
+        const hasFilters = Object.keys(filters).length > 0;
+        const hasContent = hasTextSearch || hasFilters;
+        
+        // For pattern-based queries, ensure they have complete values
+        if (hasFilters) {
+            // Check that all filter patterns have proper values
+            for (const [key, filterValues] of Object.entries(filters)) {
+                if (!filterValues || filterValues.length === 0) {
+                    return false;
+                }
+                // Ensure all values are meaningful (not empty strings)
+                const hasValidValues = filterValues.every(filter => {
+                    // Check for different types of filter values
+                    if (filter.pattern !== undefined) {
+                        return filter.pattern && filter.pattern.trim();
+                    }
+                    if (filter.value !== undefined) {
+                        return filter.value !== '' && filter.value !== null;
+                    }
+                    if (filter.feature !== undefined) {
+                        return filter.feature && filter.feature.trim();
+                    }
+                    // Default case - check if filter has any meaningful content
+                    return Object.values(filter).some(val => 
+                        val !== undefined && val !== null && val !== ''
+                    );
+                });
+                if (!hasValidValues) {
+                    return false;
+                }
+            }
+        }
+        
+        return hasContent;
+    } catch (error) {
+        // If parsing fails, consider it invalid syntax
+        console.warn('🔍 [SEARCH] Query syntax validation failed:', error);
+        return false;
+    }
 }
 
 // ========================================
@@ -2761,7 +2915,10 @@ $(function() {
         searchInput.value = initialSearch;
         // Use setTimeout to ensure the page is fully loaded before performing search
         setTimeout(() => {
-            performSearch(initialSearch);
+            const searchResults = performSearch(initialSearch);
+            
+            // If there are results, scroll to exact match or first visible element
+            scrollToSearchResult(searchResults, 'Restoring URL search');
         }, 100);
     }
 
@@ -2828,6 +2985,7 @@ $(function() {
                 e.preventDefault();
                 const selectedSuggestion = suggestionItems[selectedSuggestionIndex].getAttribute('data-suggestion');
                 applySuggestion(selectedSuggestion);
+                // Note: applySuggestion will handle search execution if syntax is valid
                 return;
             }
         }
@@ -2839,31 +2997,18 @@ $(function() {
             if (selectedSuggestionIndex >= 0 && suggestionItems.length > 0) {
                 const selectedSuggestion = suggestionItems[selectedSuggestionIndex].getAttribute('data-suggestion');
                 applySuggestion(selectedSuggestion);
+                // Note: applySuggestion will handle search execution if syntax is valid
                 return;
             }
             
-            // Perform search (or show all events if empty)
+            // Perform search (or show all events if empty) only when no suggestion was selected
             const query = this.value.trim();
             if (query) {
                 window.searchSuggestions.saveSearch(query);
                 const searchResults = performSearch(query);
                 
-                // If there are results, scroll to the first visible element
-                if (searchResults && searchResults.totalVisible > 0 && searchResults.firstVisibleElement) {
-                    setTimeout(() => {
-                        // Calculate offset to account for fixed navbar (approximately 100px based on margin-top)
-                        const navbar = document.querySelector('.navbar.fixed-top');
-                        const navbarHeight = navbar ? navbar.offsetHeight + 20 : 100; // 20px extra padding
-                        
-                        const elementRect = searchResults.firstVisibleElement.getBoundingClientRect();
-                        const offsetTop = elementRect.top + window.pageYOffset - navbarHeight;
-                        
-                        window.scrollTo({
-                            top: offsetTop,
-                            behavior: 'smooth'
-                        });
-                    }, 100); // Small delay to ensure DOM updates are complete
-                }
+                // If there are results, scroll to exact match or first visible element
+                scrollToSearchResult(searchResults, 'Enter key search');
             } else {
                 // Show all events when search field is empty
                 clearSearch();
@@ -2913,7 +3058,10 @@ $(function() {
         if (searchFromURL !== searchInput.value) {
             searchInput.value = searchFromURL;
             if (searchFromURL) {
-                performSearch(searchFromURL);
+                const searchResults = performSearch(searchFromURL);
+                
+                // If there are results, scroll to exact match or first visible element
+                scrollToSearchResult(searchResults, 'Popstate navigation');
             } else {
                 clearSearch();
             }

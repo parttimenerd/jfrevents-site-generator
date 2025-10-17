@@ -64,6 +64,11 @@ We as members, contributors, and leaders pledge to make participation in our com
 a harassment-free experience for everyone. By participating in this project,
 you agree to abide by its [Code of Conduct](https://github.com/SAP/.github/blob/main/CODE_OF_CONDUCT.md) at all times.
 
+TODO
+----
+- when an input matches an event exactly, focus on that event directly
+- show all the types that an event depends on
+
 License
 -------
 Copyright 2023 - 2025  SAP SE or an SAP affiliate company and contributors.
