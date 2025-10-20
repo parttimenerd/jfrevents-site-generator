@@ -15,6 +15,43 @@
     <link rel="stylesheet" href="css/prism.min.css">
     <link rel="stylesheet" href="css/prism-line-numbers.min.css">
     <link rel="stylesheet" href="css/prism-line-highlight.min.css">
+    <style>
+        /* Warning suggestion styles */
+        .suggestion-warning {
+            color: #856404 !important;
+        }
+        .list-group-item-warning {
+            background-color: #fff3cd !important;
+            border-color: #ffeaa7 !important;
+        }
+        .list-group-item-warning:hover {
+            background-color: #ffeaa7 !important;
+        }
+        .text-warning {
+            color: #856404 !important;
+        }
+        
+        /* Consistent suggestion height fix */
+        #searchSuggestions .list-group-item {
+            padding: 0.75rem 1rem !important;
+            min-height: 2.5rem !important;
+            line-height: 1.2 !important;
+            box-sizing: border-box !important;
+        }
+        
+        #searchSuggestions .list-group-item.active {
+            padding: 0.75rem 1rem !important;
+            min-height: 2.5rem !important;
+            line-height: 1.2 !important;
+            box-sizing: border-box !important;
+        }
+        
+        #searchSuggestions .list-group-item:hover {
+            padding: 0.75rem 1rem !important;
+            min-height: 2.5rem !important;
+            line-height: 1.2 !important;
+        }
+    </style>
 </head>
 <body class="d-flex flex-column h-100">
 
@@ -368,7 +405,6 @@ const searchPatterns = {
         description: "Match event name (supports * and ? wildcards)",
         examples: ["name:*GC*", "name:Thread?roup", "name:JavaMonitorEnter", "name-sensitive:GCEvent", "!name:*Test*"],
         usage: "Use wildcards to match event names. * matches any characters, ? matches single character. Add -sensitive for case-sensitive matching. Prefix with ! to exclude matches.",
-
         buildContextData: () => {
             const nameSet = new Set();
             document.querySelectorAll('[data-name]').forEach(el => {
@@ -1038,8 +1074,158 @@ const searchPatterns = {
 
             return result;
         }
+    },
+
+    hide: {
+        regex: /hide:([^\s]+)/g,
+        description: "Hide specific sections from display (supports comma-separated values, no negation support)",
+        examples: ["hide:code-context", "hide:examples", "hide:description", "hide:fields", "hide:badges", "hide:configurations", "hide:categories", "hide:description-missing", "hide:source", "hide:examples,fields,categories"],
+        usage: "Hide specific sections from the display. Multiple values can be separated by commas. Note: This pattern does not support negation (!) prefix.",
+        
+        // Enhanced usage for better formatting in help
+        detailedUsage: `
+            <p>Hide specific sections from the display to focus on the information you need.</p>
+            <div class="alert alert-warning mb-3">
+                <strong>Note:</strong> This pattern does not support negation with the <code>!</code> prefix. Use it only to hide sections, not to show only specific sections.
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Available Sections:</h6>
+                    <ul class="small">
+                        <li><code>code-context</code> - Code usage examples</li>
+                        <li><code>examples</code> - Event examples</li>
+                        <li><code>description</code> - Event descriptions</li>
+                        <li><code>fields</code> - Field tables</li>
+                        <li><code>badges</code> - Event badges</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>More Sections:</h6>
+                    <ul class="small">
+                        <li><code>configurations</code> - Configuration tables</li>
+                        <li><code>categories</code> - Event categories</li>
+                        <li><code>description-missing</code> - Missing description notices</li>
+                        <li><code>source</code> - Event source information</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mt-2">
+                <h6>Usage Tips:</h6>
+                <ul class="small">
+                    <li>Separate multiple sections with commas: <code>hide:examples,fields</code></li>
+                    <li>Combine with other patterns: <code>name:*GC* hide:badges,source</code></li>
+                    <li>Cannot be negated - <code>!hide:description</code> is not supported</li>
+                </ul>
+            </div>
+        `,
+        
+        // Mark this as an action pattern (not a filter)
+        isAction: true,
+        
+        // Reset all sections before executing hide actions
+        beforeAll: () => {
+            console.log('🎬 [BEFORE_ALL] Resetting section visibility before hide action');
+            showAllSections();
+        },
+
+        buildContextData: () => {
+            return ['code-context', 'examples', 'description', 'fields', 'badges', 'configurations', 'categories', 'description-missing', 'source'];
+        },
+
+        getSuggestions: (pattern, valueQuery, replaceCurrentTerm, input, cursorPos) => {
+            const sections = ['code-context', 'examples', 'description', 'fields', 'badges', 'configurations', 'categories', 'description-missing', 'source'];
+            
+            const baseDescriptions = {
+                'code-context': 'Hide code context sections',
+                'examples': 'Hide example sections',
+                'description': 'Hide description sections',
+                'fields': 'Hide field tables',
+                'badges': 'Hide event badges',
+                'configurations': 'Hide configuration tables',
+                'categories': 'Hide event categories',
+                'description-missing': 'Hide missing description notices',
+                'source': 'Hide event source information'
+            };
+            
+            // Handle comma-separated values
+            const currentValues = valueQuery.split(',');
+            const lastValue = currentValues[currentValues.length - 1].trim().toLowerCase();
+            
+            return sections
+                .filter(s => s.startsWith(lastValue) && !currentValues.slice(0, -1).includes(s))
+                .map(s => {
+                    const newValues = [...currentValues.slice(0, -1), s];
+                    return {
+                        type: 'completion',
+                        text: replaceCurrentTerm(input, cursorPos, `${pattern}:${newValues.join(',')}`),
+                        description: baseDescriptions[s],
+                        category: 'Hide Section'
+                    };
+                });
+        },
+
+        parse: (matches) => matches.map(match => {
+            // Split comma-separated values
+            const values = match.value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+            return {
+                sections: values
+            };
+        }),
+
+        // Action patterns don't filter events, they perform actions after search
+        match: (patterns, eventElement) => {
+            return true; // Always return true for action patterns
+        },
+
+        // Execute the action after search is complete
+        executeAction: (parsedPatterns, searchContext) => {
+            console.log('🎬 [ACTION] Executing hide action with patterns:', parsedPatterns);
+            
+            if (!parsedPatterns || parsedPatterns.length === 0) {
+                return;
+            }
+            
+            // Collect all sections to hide
+            const sectionsToHide = new Set();
+            
+            // Simple hide logic (no negation support)
+            parsedPatterns.forEach(pattern => {
+                pattern.sections.forEach(section => {
+                    sectionsToHide.add(section);
+                });
+            });
+            
+            console.log('🎬 [ACTION] Sections to hide:', Array.from(sectionsToHide));
+            
+            // Store which sections should be hidden for use by other functions
+            searchContext.hiddenSections = sectionsToHide;
+            
+            // Map sections to CSS classes and apply hiding
+            const sectionClassMap = {
+                'code-context': '.code-context',
+                'examples': '.examples',
+                'description': '.description, .event-description, [class*="description"]',
+                'fields': '.field-table',
+                'badges': '.badge',
+                'configurations': '.config-table, .configuration',
+                'categories': '.categories',
+                'description-missing': '.description-missing',
+                'source': '.source'
+            };
+            
+            // Apply CSS classes for each section to hide
+            sectionsToHide.forEach(section => {
+                const cssSelector = sectionClassMap[section];
+                if (cssSelector) {
+                    document.querySelectorAll(cssSelector).forEach(el => {
+                        el.style.display = 'none';
+                    });
+                }
+            });
+        }
     }
 };
+
 // ========================================
 // SEARCH CORE FUNCTIONALITY
 // ========================================
@@ -1215,8 +1401,9 @@ function parseSearchQuery(query) {
     const parser = new SearchExpressionParser(query);
     const expressionTree = parser.parse();
     
-    // Extract filters from all terms in the expression
+    // Extract filters and actions from all terms in the expression
     const filters = {};
+    const actions = {};
     const allTerms = [];
     
     function extractTerms(node) {
@@ -1251,9 +1438,13 @@ function parseSearchQuery(query) {
                 if (key === 'jdk' || key === 'graalvm' || key === 'type') {
                     negate = match[1] === '!';
                     value = match[2];
-                } else if (key === 'label' || key === 'config' || key === 'config-only') {
+                } else if (key === 'label' || key === 'config' || key === 'config-only' || key === 'has') {
                     negate = match[1] === '!';
                     value = match[2];
+                } else if (key === 'hide') {
+                    // Hide pattern doesn't support negation: /hide:([^\s]+)/g
+                    negate = false;
+                    value = match[1];
                 } else if (key === 'file' || key === 'snippet') {
                     negate = match[1] === '!';
                     sensitive = match[2] === '-sensitive';
@@ -1276,14 +1467,45 @@ function parseSearchQuery(query) {
         });
 
         if (matches.length > 0) {
-            filters[key] = config.parse(matches);
+            const parsedMatches = config.parse(matches);
+            
+            // Separate actions from filters based on the isAction flag
+            if (config.isAction) {
+                actions[key] = {
+                    patterns: parsedMatches,
+                    executor: config.executeAction
+                };
+            } else {
+                filters[key] = parsedMatches;
+            }
+        }
+    });
+
+    // Collect unique beforeAll functions from patterns that have matches
+    const beforeAllFunctions = [];
+    const seenBeforeAllFunctions = new Set();
+    
+    Object.entries(searchPatterns).forEach(([key, config]) => {
+        if (config.beforeAll && typeof config.beforeAll === 'function') {
+            // Check if this pattern has matches in filters or actions
+            if (filters[key] || actions[key]) {
+                // Use function.toString() to detect duplicate functions
+                const functionKey = config.beforeAll.toString();
+                if (!seenBeforeAllFunctions.has(functionKey)) {
+                    seenBeforeAllFunctions.add(functionKey);
+                    beforeAllFunctions.push({
+                        patternName: key,
+                        beforeAllFunction: config.beforeAll
+                    });
+                }
+            }
         }
     });
 
     // Clean up text search
     textSearch = textSearch.replace(/\s+/g, ' ').replace(/\|\|/g, ' ').replace(/[()]/g, ' ').trim();
 
-    return { textSearch, filters, expressionTree };
+    return { textSearch, filters, actions, expressionTree, beforeAllFunctions };
 }
 
 function globMatch(pattern, text, caseSensitive = false) {
@@ -1404,9 +1626,13 @@ function evaluateTerm(term, eventElement, fileContentMap) {
             if (key === 'jdk' || key === 'graalvm' || key === 'type') {
                 negate = match[1] === '!';
                 value = match[2];
-            } else if (key === 'label' || key === 'config' || key === 'config-only') {
+            } else if (key === 'label' || key === 'config' || key === 'config-only' || key === 'has') {
                 negate = match[1] === '!';
                 value = match[2];
+            } else if (key === 'hide') {
+                // Hide pattern doesn't support negation: /hide:([^\s]+)/g
+                negate = false;
+                value = match[1];
             } else if (key === 'file' || key === 'snippet') {
                 negate = match[1] === '!';
                 sensitive = match[2] === '-sensitive';
@@ -1558,7 +1784,6 @@ function collectDependentTypes() {
 function showDependentTypes(dependentTypeIds, hasVisibleEvents) {
     // Find all possible type elements using multiple selectors
     const allTypes = Array.from(document.querySelectorAll(".event-header"));
-    
     if (dependentTypeIds.length === 0) {
         console.log('🔍 [TYPES] No dependent types found');
         return;
@@ -1586,15 +1811,88 @@ function showDependentTypes(dependentTypeIds, hasVisibleEvents) {
     console.log('🔍 [TYPES] Dependent type IDs:', dependentTypeIds);
 }
 
+// Helper functions to hide specific sections
+function showAllSections() {
+    // Reset visibility for all hideable sections using the same selectors as the hide action
+    const allHideableSelectors = [
+        '.code-context',
+        '.examples', 
+        '.description', 
+        '.event-description', 
+        '[class*="description"]',
+        '.field-table',
+        '.badge',
+        '.config-table', 
+        '.configuration'
+    ];
+    
+    allHideableSelectors.forEach(selector => {
+        document.querySelectorAll(selector).forEach(el => {
+            el.style.display = '';
+        });
+    });
+}
+
+
+
+
+
+// ========================================
+// SEARCH ACTION FRAMEWORK
+// ========================================
+
+// Execute all post-search actions with the search context
+function executeSearchActions(actions, searchContext) {
+    if (!actions || Object.keys(actions).length === 0) {
+        console.log('🎬 [ACTION] No actions to execute');
+        return;
+    }
+    
+    console.log('🎬 [ACTION] Executing', Object.keys(actions).length, 'action types');
+    
+    // Execute each action type
+    Object.entries(actions).forEach(([actionType, actionData]) => {
+        
+        try {
+            console.log(`🎬 [ACTION] Executing ${actionType} action`);
+            
+            if (actionData.executor && typeof actionData.executor === 'function') {
+                // Call the action's executor function with its patterns and the search context
+                actionData.executor(actionData.patterns, searchContext.searchState);
+            } else {
+                console.warn(`🎬 [ACTION] No executor found for action type: ${actionType}`);
+            }
+        } catch (error) {
+            console.error(`🎬 [ACTION] Error executing ${actionType} action:`, error);
+        }
+    });
+    
+    console.log('🎬 [ACTION] All actions executed');
+}
+
 function performSearch(query) {
     const startTime = performance.now();
 
-    const { textSearch, filters, expressionTree } = parseSearchQuery(query);
+    const { textSearch, filters, actions, expressionTree, beforeAllFunctions } = parseSearchQuery(query);
 
     // Store current search state
     window.searchState.query = query;
     window.searchState.filters = filters;
+    window.searchState.actions = actions;
     window.searchState.expressionTree = expressionTree;
+
+    // Execute beforeAll functions from patterns that have matches
+    if (beforeAllFunctions && beforeAllFunctions.length > 0) {
+        console.log(`🎬 [BEFORE_ALL] Executing ${beforeAllFunctions.length} beforeAll functions`);
+        beforeAllFunctions.forEach(({ patternName, beforeAllFunction }) => {
+            try {
+                console.log(`🎬 [BEFORE_ALL] Executing beforeAll for pattern: ${patternName}`);
+                beforeAllFunction();
+            } catch (error) {
+                console.error(`🎬 [BEFORE_ALL] Error executing beforeAll for pattern ${patternName}:`, error);
+            }
+        });
+    }
 
     // Get all event elements
     const eventElements = document.querySelectorAll('.event');
@@ -1691,6 +1989,14 @@ function performSearch(query) {
     const dependentTypeIds = collectDependentTypes();
     showDependentTypes(dependentTypeIds, totalVisible > 0);
 
+    // Execute all post-search actions
+    executeSearchActions(actions, {
+        totalVisible: totalVisible,
+        firstVisibleElement: firstVisibleElement,
+        exactMatchElement: exactMatchElement,
+        searchState: window.searchState
+    });
+
     // Update URL state
     if (query.trim()) {
         pushURLState('search', query);
@@ -1719,8 +2025,35 @@ function clearSearch() {
         el.style.display = 'block';
     });
 
+    // Show all types when search is cleared
+    const allTypes = Array.from(document.querySelectorAll([
+        '.type',
+        '.type-entry', 
+        '[data-type="type"]',
+        '[id]:not(.event):not(.event-header):not(.section-header)' // Elements with IDs that could be types
+    ].join(', ')));
+    
+    allTypes.forEach(typeEl => {
+        // Only show if it looks like a type (not an event or section)
+        if (!typeEl.classList.contains('event') && 
+            !typeEl.classList.contains('event-header') && 
+            !typeEl.classList.contains('section-header')) {
+            typeEl.style.display = 'block';
+            const typeHeader = typeEl.previousElementSibling;
+            if (typeHeader && (typeHeader.classList.contains('type-header') || typeHeader.tagName === 'H2' || typeHeader.tagName === 'H3')) {
+                typeHeader.style.display = 'block';
+            }
+            
+            // Show in TOC as well
+            const tocElement = document.querySelector(`.nav-link[href="#${typeEl.id}"]`);
+            if (tocElement) {
+                tocElement.classList.remove('hidden-subtoc-section');
+            }
+        }
+    });
+
     // Clear search state
-    window.searchState = { query: '', filters: {}, searchTimeout: null };
+    window.searchState = { query: '', filters: {}, actions: {}, searchTimeout: null };
 
     // Clear search results indicator
     updateSearchResultsIndicator(null, null);
@@ -1848,6 +2181,9 @@ function generateSearchPatternsTableRows() {
     };
     
     Object.entries(searchPatterns).forEach(([key, config]) => {
+        // Skip hidden patterns or patterns that are only for internal beforeAll use
+        if (config.hidden) return;
+        
         const patternName = `<span class="search-pattern-property suggestion-text">${key}:</span>`;
         
         // Extract sample values from examples (use all examples and clean them)
@@ -1878,7 +2214,7 @@ function generateSearchPatternsTableRows() {
         }
         
         rows += `
-                                            <tr>
+                                            <tr class="search-pattern-row" data-pattern-key="${key}" style="cursor: pointer;">
                                                 <td>${patternName}</td>
                                                 <td>${valuesHtml}</td>
                                                 <td>${config.description}</td>
@@ -1954,6 +2290,8 @@ function generateSearchHelpContent() {
                                     <small class="text-muted">
                                         <strong>Note:</strong> Prefix any pattern with ${highlightSearchQuery('!')} to exclude matches. 
                                         Add ${highlightSearchQuery('-sensitive')} for case-sensitive matching where supported.
+                                        <br>
+                                        <i class="fas fa-mouse-pointer"></i> <strong>Tip:</strong> Click on any pattern row to jump to its detailed description below.
                                     </small>
                                 </div>
                             </div>
@@ -2089,13 +2427,13 @@ function generateSearchHelpContent() {
         ).join(' ');
 
         helpContent += `
-            <div class="search-pattern-help mb-4 border-start border-3 border-info ps-3">
+            <div class="search-pattern-help mb-4 border-start border-3 border-info ps-3" id="pattern-detail-${key}">
                 <h5 class="text-info mb-2">
                     <i class="fas fa-filter me-2"></i><span class="search-pattern-property suggestion-text bg-light text-primary px-2 py-1 rounded">${key}:</span> ${displayName} Search
                 </h5>
                 <p class="mb-2">${config.description}</p>
                 <div class="alert alert-light mb-2">
-                    <small class="text-muted">${config.usage}</small>
+                    ${config.detailedUsage ? config.detailedUsage : `<small class="text-muted">${config.usage}</small>`}
                 </div>
                 <div class="examples">
                     <strong class="text-dark">Examples:</strong>
@@ -2154,6 +2492,47 @@ function showSearchHelp() {
     const tableBody = modal.querySelector('#searchPatternsTableBody');
     if (tableBody) {
         tableBody.innerHTML = generateSearchPatternsTableRows();
+        
+        // Add click handlers to table rows for focusing on detailed descriptions
+        const patternRows = tableBody.querySelectorAll('.search-pattern-row');
+        patternRows.forEach(row => {
+            row.addEventListener('click', () => {
+                const patternKey = row.dataset.patternKey;
+                const detailElement = modal.querySelector(`#pattern-detail-${patternKey}`);
+                
+                if (detailElement) {
+                    // Add visual feedback to the clicked row
+                    patternRows.forEach(r => r.classList.remove('table-active'));
+                    row.classList.add('table-active');
+                    
+                    // Smooth scroll to the detailed description
+                    detailElement.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start',
+                        inline: 'nearest'
+                    });
+                    
+                    // Add a temporary highlight effect to the target section
+                    detailElement.style.backgroundColor = '#fff3cd';
+                    detailElement.style.transition = 'background-color 0.3s ease';
+                    
+                    setTimeout(() => {
+                        detailElement.style.backgroundColor = '';
+                    }, 1500);
+                }
+            });
+            
+            // Add hover effect for better UX
+            row.addEventListener('mouseenter', () => {
+                row.style.backgroundColor = '#f8f9fa';
+            });
+            
+            row.addEventListener('mouseleave', () => {
+                if (!row.classList.contains('table-active')) {
+                    row.style.backgroundColor = '';
+                }
+            });
+        });
     }
     
     const bsModal = new bootstrap.Modal(modal);
@@ -2279,6 +2658,36 @@ window.searchSuggestions = {
             const [patternPart, value] = currentContext.currentTerm.split(':', 2);
             const valueQuery = (value || '').toLowerCase();
             
+            // Special case: Handle !hide: autocomplete with warning
+            if (patternPart === '!hide') {
+                // Convert !hide: to hide: and add warning suggestion
+                const hideSuggestions = searchPatterns.hide.getSuggestions(
+                    'hide', // Use 'hide' instead of '!hide'
+                    valueQuery, 
+                    this.replaceCurrentTerm.bind(this), 
+                    input, 
+                    cursorPos
+                );
+                
+                // Add warning suggestion at the top
+                suggestions.push({
+                    type: 'warning',
+                    text: input.replace('!hide:', 'hide:'),
+                    description: '⚠️ Negation not supported for hide pattern - converted to regular hide',
+                    category: 'Warning'
+                });
+                
+                // Add the converted hide suggestions
+                suggestions.push(...hideSuggestions.map(s => ({
+                    ...s,
+                    text: s.text.replace('!hide:', 'hide:'),
+                    description: s.description + ' (converted from !hide:)',
+                    category: 'Hide Section (Converted)'
+                })));
+                
+                return suggestions.slice(0, 15);
+            }
+            
             // Find the matching search pattern (handle negation and sensitivity)
             const cleanPattern = patternPart.replace(/^!/, '');
             const basePart = cleanPattern.replace(/-sensitive$/, '');
@@ -2292,7 +2701,7 @@ window.searchSuggestions = {
             
             if (matchingPattern && matchingPattern.getSuggestions) {
                 const patternSuggestions = matchingPattern.getSuggestions(
-                    cleanPattern, 
+                    patternPart, // Pass the original pattern name (including ! prefix)
                     valueQuery, 
                     this.replaceCurrentTerm.bind(this), 
                     input, 
@@ -2371,9 +2780,9 @@ window.searchSuggestions = {
             });
         }
         
-        // 6. Default suggestions for empty or short input OR when after ||
-        if (input.length <= 2 || currentContext.isAfterOR) {
-            this.addDefaultSuggestions(suggestions, input);
+        // 6. Default suggestions for empty or short input OR when after || OR when we have few specific suggestions
+        if (input.length <= 2 || currentContext.isAfterOR || suggestions.length < 5) {
+            this.addDefaultSuggestions(suggestions, input, currentContext);
         }
         
         // 7. Parentheses suggestions for grouping (moved to bottom)
@@ -2397,14 +2806,45 @@ window.searchSuggestions = {
             }
         }
         
-        // Remove duplicates and limit results, ensuring grouping comes last
-        const nonGroupingSuggestions = suggestions.filter((s, i, arr) => 
-            arr.findIndex(other => other.text === s.text) === i
-        );
+        // Enhanced deduplication: Remove duplicates and similar suggestions while preserving warnings
+        const deduplicatedSuggestions = [];
+        const seenTexts = new Set();
+        const seenPatterns = new Set();
         
-        const allSuggestions = [...nonGroupingSuggestions, ...groupingSuggestions];
+        suggestions.forEach(suggestion => {
+            // Always keep warning suggestions
+            if (suggestion.type === 'warning') {
+                deduplicatedSuggestions.push(suggestion);
+                return;
+            }
+            
+            // For other suggestions, check for exact text duplicates
+            if (seenTexts.has(suggestion.text)) {
+                return;
+            }
+            
+            // For pattern suggestions, also check for similar patterns
+            if (suggestion.category && suggestion.category.includes('Pattern')) {
+                // Extract the pattern part (e.g., "hide:" from "hide:")
+                const patternMatch = suggestion.text.match(/(\w+):/);
+                if (patternMatch) {
+                    const patternName = patternMatch[1];
+                    
+                    // Skip if we've already seen this pattern type, unless it's a conversion
+                    if (seenPatterns.has(patternName) && !suggestion.category.includes('Converted')) {
+                        return;
+                    }
+                    seenPatterns.add(patternName);
+                }
+            }
+            
+            seenTexts.add(suggestion.text);
+            deduplicatedSuggestions.push(suggestion);
+        });
+        
+        const allSuggestions = [...deduplicatedSuggestions, ...groupingSuggestions];
         console.log('🔍 [SUGGESTIONS] Final suggestions count:', allSuggestions.length);
-        console.log('🔍 [SUGGESTIONS] Final suggestions:', allSuggestions.map(s => ({ text: s.text, category: s.category })));
+        console.log('🔍 [SUGGESTIONS] Final suggestions:', allSuggestions.map(s => ({ text: s.text, category: s.category, type: s.type })));
         return allSuggestions.slice(0, 15);
     },
     
@@ -2581,6 +3021,25 @@ window.searchSuggestions = {
         const currentTermLower = (context.currentTerm || '').toLowerCase();
         console.log('🔍 [SUGGESTIONS] currentTermLower:', currentTermLower);
         
+        // Special case: Handle !hide pattern name suggestion with warning
+        if (currentTermLower === '!hide' || (currentTermLower.startsWith('!') && 'hide'.startsWith(currentTermLower.substring(1)))) {
+            // Add warning suggestion
+            suggestions.push({
+                type: 'warning',
+                text: this.replaceCurrentTerm(input, cursorPos, 'hide:'),
+                description: '⚠️ Negation not supported for hide pattern - use hide: instead',
+                category: 'Warning'
+            });
+            
+            // Add the converted hide pattern suggestion
+            suggestions.push({
+                type: 'completion',
+                text: this.replaceCurrentTerm(input, cursorPos, 'hide:'),
+                description: 'Hide specific sections from display (converted from !hide)',
+                category: 'Search Pattern (Converted)'
+            });
+        }
+        
         // Dynamically generate pattern suggestions from searchPatterns object
         const patternSuggestions = Object.entries(searchPatterns).map(([key, pattern]) => ({
             pattern: key + ':',
@@ -2611,13 +3070,18 @@ window.searchSuggestions = {
             });
         });
             
-        // Also suggest negated versions
+        // Also suggest negated versions (but skip hide pattern)
         if (currentTermLower.startsWith('!') || currentTermLower === '') {
             const negatedPatterns = currentTermLower === '' ? 
                 patternSuggestions.slice(0, 3) : // Show first 3 when no current term
                 patternSuggestions.filter(p => ('!' + p.pattern).startsWith(currentTermLower));
                 
             negatedPatterns.forEach(p => {
+                // Skip hide pattern for negation since it doesn't support it
+                if (p.pattern.startsWith('hide:')) {
+                    return;
+                }
+                
                 suggestions.push({
                     type: 'completion',
                     text: this.replaceCurrentTerm(input, cursorPos, '!' + p.pattern),
@@ -2664,7 +3128,7 @@ window.searchSuggestions = {
         }
     },
     
-    addDefaultSuggestions(suggestions, input) {
+    addDefaultSuggestions(suggestions, input, currentContext) {
         // Add default event name suggestions when empty or after ||
         if (input.length === 0) {
             const eventNames = searchPatterns.name.buildContextData();
@@ -2689,10 +3153,26 @@ window.searchSuggestions = {
             { text: '(jdk:17 || jdk:21) name:*GC*', desc: 'GC events in JDK 17 or 21 (grouping example)', cat: 'Example' },
             { text: 'graalvm:true', desc: 'Events with GraalVM support', cat: 'Example' },
             { text: 'fields:stackTrace', desc: 'Events with stack trace', cat: 'Example' },
-            { text: 'type:event', desc: 'JFR event entries only', cat: 'Example' }
+            { text: 'type:event', desc: 'JFR event entries only', cat: 'Example' },
+            { text: 'hide:code-context,examples', desc: 'Hide code context and examples sections', cat: 'Example' },
+            { text: 'hide:description', desc: 'Hide description sections', cat: 'Example' },
+            { text: 'hide:fields,badges', desc: 'Hide fields and badges sections', cat: 'Example' }
         ];
         
-        commonSuggestions.forEach(s => {
+        // Determine the filter term - use currentContext.currentTerm if available, otherwise use input
+        const filterTerm = (currentContext && currentContext.currentTerm) ? 
+            currentContext.currentTerm.toLowerCase() : 
+            input.toLowerCase();
+        
+        // Filter examples by current term when not empty
+        const filteredSuggestions = filterTerm.trim().length === 0 ? 
+            commonSuggestions : 
+            commonSuggestions.filter(s => 
+                s.text.toLowerCase().includes(filterTerm) ||
+                s.desc.toLowerCase().includes(filterTerm)
+            );
+        
+        filteredSuggestions.forEach(s => {
             suggestions.push({
                 type: 'example',
                 text: s.text,
@@ -2764,7 +3244,7 @@ function showSearchSuggestions(input, suggestions) {
     suggestionsList.innerHTML = '';
     
     // Define category order for better UX
-    const categoryOrder = ['Operator', 'Grouping', 'Event Name', 'Search Pattern', 'Negated Pattern', 'Popular Events', 'Example', 'History'];
+    const categoryOrder = ['Warning', 'Operator', 'Grouping', 'Event Name', 'Search Pattern', 'Search Pattern (Converted)', 'Hide Section (Converted)', 'Negated Pattern', 'Popular Events', 'Example', 'History'];
     const sortedCategories = categoryOrder.filter(cat => grouped[cat]).concat(
         Object.keys(grouped).filter(cat => !categoryOrder.includes(cat))
     );
@@ -2796,6 +3276,11 @@ function showSearchSuggestions(input, suggestions) {
             item.className = 'search-suggestion-item list-group-item list-group-item-action';
             item.setAttribute('data-suggestion', suggestion.text);
             
+            // Add special styling for warning suggestions
+            if (suggestion.type === 'warning') {
+                item.classList.add('list-group-item-warning');
+            }
+            
             const mainDiv = document.createElement('div');
             let mainClass = 'suggestion-text suggestion-text-highlighted';
             
@@ -2804,6 +3289,8 @@ function showSearchSuggestions(input, suggestions) {
                 mainClass += ' suggestion-operator';
             } else if (suggestion.type === 'grouping') {
                 mainClass += ' suggestion-grouping';
+            } else if (suggestion.type === 'warning') {
+                mainClass += ' suggestion-warning';
             }
             
             mainDiv.className = mainClass;
@@ -2813,15 +3300,29 @@ function showSearchSuggestions(input, suggestions) {
                 mainDiv.innerHTML = '<strong>||</strong> (OR)';
             } else if (suggestion.type === 'grouping') {
                 mainDiv.innerHTML = suggestion.text.includes('(') ? '<strong>(</strong> group' : '<strong>)</strong> end';
+            } else if (suggestion.type === 'warning') {
+                // For warning suggestions, show the corrected pattern
+                const correctedPattern = suggestion.text.trim().split(/\s+/).pop();
+                mainDiv.innerHTML = `<span class="text-warning">⚠️</span> ${highlightSearchPatterns(correctedPattern)}`;
             } else {
-                // Extract and show only the relevant part from the suggestion
-                const suggestionParts = suggestion.text.trim().split(/\s+/);
-                const lastPart = suggestionParts[suggestionParts.length - 1];
-                mainDiv.innerHTML = highlightSearchPatterns(lastPart);
+                // For pattern-based suggestions (containing :), show the full text
+                // For other suggestions, show only the relevant part
+                if (suggestion.text.includes(':') || suggestion.category === 'Example') {
+                    // Show full pattern or example text
+                    mainDiv.innerHTML = highlightSearchPatterns(suggestion.text);
+                } else {
+                    // Extract and show only the relevant part from the suggestion
+                    const suggestionParts = suggestion.text.trim().split(/\s+/);
+                    const lastPart = suggestionParts[suggestionParts.length - 1];
+                    mainDiv.innerHTML = highlightSearchPatterns(lastPart);
+                }
             }
             
             const descDiv = document.createElement('div');
             descDiv.className = 'suggestion-description';
+            if (suggestion.type === 'warning') {
+                descDiv.classList.add('text-warning');
+            }
             descDiv.textContent = suggestion.description;
             
             item.appendChild(mainDiv);
@@ -2886,8 +3387,11 @@ function showSearchSuggestions(input, suggestions) {
         // Trigger input event to update suggestions for context-aware help
         searchInput.dispatchEvent(new Event('input'));
         
-        // Check if the resulting query has valid syntax and perform search if it does
-        if (hasValidSearchSyntax(finalText.trim())) {
+        // For Enter key suggestion acceptance, always execute search
+        // For click suggestions, check if query has valid syntax first
+        const isFromEnterKey = arguments[1] === 'enter';
+        
+        if (isFromEnterKey || hasValidSearchSyntax(finalText.trim())) {
             console.log('🔍 [SEARCH] Auto-executing search after suggestion application:', finalText.trim());
             window.searchSuggestions.saveSearch(finalText.trim());
             const searchResults = performSearch(finalText.trim());
@@ -3006,7 +3510,8 @@ function highlightSearchPatterns(text) {
         'category:': 'search-pattern-property',
         'file:': 'search-pattern-property',
         'snippet:': 'search-pattern-property',
-        'type:': 'search-pattern-property'
+        'type:': 'search-pattern-property',
+        'hide:': 'search-pattern-property',
     };
     
     // Sort patterns by length (longest first) to avoid partial matches
@@ -3106,18 +3611,18 @@ $(function() {
         if (!suggestionsPanel.classList.contains('d-none') && suggestionItems.length > 0) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestionItems.length - 1);
+                selectedSuggestionIndex = findNextSelectableSuggestion(suggestionItems, selectedSuggestionIndex, 1);
                 updateSuggestionSelection(suggestionItems);
                 return;
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+                selectedSuggestionIndex = findNextSelectableSuggestion(suggestionItems, selectedSuggestionIndex, -1);
                 updateSuggestionSelection(suggestionItems);
                 return;
             } else if (e.key === 'Tab' && selectedSuggestionIndex >= 0) {
                 e.preventDefault();
                 const selectedSuggestion = suggestionItems[selectedSuggestionIndex].getAttribute('data-suggestion');
-                applySuggestion(selectedSuggestion);
+                applySuggestion(selectedSuggestion, 'tab');
                 // Note: applySuggestion will handle search execution if syntax is valid
                 return;
             }
@@ -3125,6 +3630,9 @@ $(function() {
         
         if (e.key === 'Enter') {
             e.preventDefault();
+            
+            // Always hide suggestions when Enter is pressed
+            hideSuggestions();
             
             // If a suggestion is selected, apply it
             if (selectedSuggestionIndex >= 0 && suggestionItems.length > 0) {
@@ -3144,13 +3652,30 @@ $(function() {
                 scrollToSearchResult(searchResults, 'Enter key search');
            
             
-            // Hide suggestions and keep focus on search field
-            hideSuggestions();
+            // Keep focus on search field
             this.focus();
         } else if (e.key === 'Escape') {
             hideSuggestions();
             this.blur();
         }
+    });
+
+    // Perform search when user clicks away (blur) if there's valid search text
+    searchInput.addEventListener('blur', function(e) {
+        const query = this.value.trim();
+        
+        // Only perform search if there's valid text and it's different from current search
+        if (query && hasValidSearchSyntax(query) && query !== window.searchState.query) {
+            console.log('🔍 [SEARCH] Auto-executing search on blur:', query);
+            window.searchSuggestions.saveSearch(query);
+            const searchResults = performSearch(query);
+            
+            // If there are results, scroll to exact match or first visible element
+            scrollToSearchResult(searchResults, 'Blur search');
+        }
+        
+        // Always hide suggestions on blur
+        hideSuggestions();
     });
 
     // Hide suggestions when clicking outside
@@ -3210,6 +3735,40 @@ $(function() {
 
     console.log('🔍 [SEARCH] Search functionality with suggestions initialized');
 });
+
+// Helper function to find the next selectable suggestion (skipping warnings)
+function findNextSelectableSuggestion(suggestionItems, currentIndex, direction) {
+    const isWarning = (item) => {
+        // Check if this suggestion item represents a warning
+        const mainDiv = item.querySelector('.suggestion-text, .suggestion-warning');
+        return mainDiv && mainDiv.classList.contains('suggestion-warning');
+    };
+    
+    let nextIndex = currentIndex + direction;
+    
+    // Handle direction and bounds
+    if (direction > 0) {
+        // Moving down
+        while (nextIndex < suggestionItems.length) {
+            if (!isWarning(suggestionItems[nextIndex])) {
+                return nextIndex;
+            }
+            nextIndex++;
+        }
+        // If we've reached the end, stay at the last non-warning item
+        return currentIndex;
+    } else {
+        // Moving up
+        while (nextIndex >= 0) {
+            if (!isWarning(suggestionItems[nextIndex])) {
+                return nextIndex;
+            }
+            nextIndex--;
+        }
+        // If we've reached the beginning, go to -1 (no selection)
+        return -1;
+    }
+}
 
 function updateSuggestionSelection(suggestionItems) {
     let selectedItem = null;
