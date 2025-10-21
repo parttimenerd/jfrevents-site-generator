@@ -8,8 +8,13 @@ import sys
 
 os.chdir(Path(__file__).parent.parent)
 
+JAVA_VERSION = "21" # Java version to use for building and running
 SITE_FOLDER = "site"
 
+def get_java_version() -> str:
+    return subprocess.check_output(
+        f"java -version 2>&1 | head -n 1 | cut -d '\"' -f 2",
+        shell=True).decode("utf-8").strip()
 
 def clean_gen():
     shutil.rmtree("target", ignore_errors=True)
@@ -25,6 +30,7 @@ def build_generator():
 
 def build_site():
     build_generator()
+    print("Building site...")
     os.system(f"java -jar target/jfrevents-site-generator-full.jar {SITE_FOLDER}")
 
 
@@ -50,9 +56,9 @@ def create_remote_pr():
         echo "Creating new commit..."
         git add jfrevents
         echo "Committing changes..."
-        git commit -m "Update jfrevents" || (echo "No changes to commit"; exit 0)
+        git commit -a -m "Update jfrevents" || (echo "No changes to commit"; exit 0)
         echo "Pushing changes..."
-        gh run git push origin jfrevents
+        gh repo sync --branch jfrevents --force
         echo "Creating PR..."
         gh pr create --title "Update jfrevents" --body "Automated update of jfrevents site content."
         """)
