@@ -240,6 +240,7 @@ class Main(
         val inGraalOnly: Boolean, val inJDKOnly: Boolean,
         // description for search
         val description: String,
+        val sectionTitle: String
     )
 
     data class SectionScope(
@@ -824,7 +825,8 @@ class Main(
                         formatJDKList(it.jdks),
                         it.isGraalOnly(),
                         it.isJDKOnly(),
-                        (it.description ?: "") + (it.additionalDescription ?: "")
+                        (it.description ?: "") + (it.additionalDescription ?: ""),
+                        title
                     )
                 },
             ),
@@ -854,7 +856,7 @@ class Main(
             DecoratedCollection(
                 types.sortedBy { it.name }.map {
                     SectionEntryScope(it.name, formatType(metadata, it), formatJDKList(it.jdks), false, false,
-                        (it.additionalDescription ?: ""))
+                        (it.additionalDescription ?: ""), title)
                 },
             ),
             formatJDKList(listOf(types.map { it.jdks.min() }.max())),

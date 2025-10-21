@@ -363,6 +363,10 @@ a.hidden-subtoc-section {
     font-size: 14px;
     border: none;
     transition: background-color 0.2s;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 .search-suggestion-item:hover,

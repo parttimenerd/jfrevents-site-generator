@@ -1783,7 +1783,7 @@ function collectDependentTypes() {
 // Function to show/hide dependent types based on search results
 function showDependentTypes(dependentTypeIds, hasVisibleEvents) {
     // Find all possible type elements using multiple selectors
-    const allTypes = Array.from(document.querySelectorAll(".event-header"));
+    const allTypes = Array.from(document.querySelectorAll(".event-header")).concat(Array.from(document.querySelectorAll(".event")));
     if (dependentTypeIds.length === 0) {
         console.log('🔍 [TYPES] No dependent types found');
         return;
@@ -1791,23 +1791,54 @@ function showDependentTypes(dependentTypeIds, hasVisibleEvents) {
     console.log('🔍 [TYPES] Showing dependent types: ', dependentTypeIds);
     
     let shownTypes = 0;
-    let hiddenTypes = 0;
+    const sectionsToShow = new Set();
     
     allTypes.forEach(typeEl => {        
-        const typeId = typeEl.id || typeEl.dataset.id || typeEl.getAttribute('id');
-        const typeHeader = typeEl.previousElementSibling;
+        const typeId = typeEl.dataset.name;
         
         if (typeId && dependentTypeIds.includes(typeId)) {
             // Show this type as it's referenced by visible events
             typeEl.style.display = 'block';
-            typeHeader.style.display = 'block';
+            
+            // Find the parent section and mark it to be shown
+            const parentSection = typeEl.closest('.section');
+            if (parentSection) {
+                sectionsToShow.add(parentSection);
+            }
+
+            const tocElement = document.querySelector(`.nav-link[href="#${typeEl.id}"]`);
+            if (tocElement) {
+                tocElement.classList.remove('hidden-subtoc-section');
+            }
             
             shownTypes++;
             console.log('🔍 [TYPES] Showing dependent type:', typeId);
         }
     });
     
-    console.log(`🔍 [TYPES] Processing complete: ${shownTypes} types shown, ${hiddenTypes} types hidden`);
+    // Show the section headers for sections that contain dependent types
+    sectionsToShow.forEach(section => {
+        const sectionHeader = section.querySelector('.section-header');
+        if (sectionHeader) {
+            sectionHeader.style.display = 'block';
+            
+            // Also ensure the entire section is visible
+            section.style.display = 'block';
+            
+            console.log('🔍 [TYPES] Showing section header and section for dependent types');
+            
+            // Also update TOC to show this section
+            const sectionId = sectionHeader.id;
+            if (sectionId) {
+                const tocElement = document.querySelector(`.nav-link[href="#${sectionId}"]`);
+                if (tocElement) {
+                    tocElement.classList.remove('hidden-toc-section');
+                }
+            }
+        }
+    });
+    
+    console.log(`🔍 [TYPES] Processing complete: ${shownTypes / 2} types shown, ${sectionsToShow.size} sections shown`);
     console.log('🔍 [TYPES] Dependent type IDs:', dependentTypeIds);
 }
 
@@ -3338,7 +3369,16 @@ function showSearchSuggestions(input, suggestions) {
             // Add click handler
             item.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
+                
+                // Apply suggestion immediately
+                console.log('🔍 [SUGGESTIONS] Click handler triggered for:', suggestion.text);
                 applySuggestion(suggestion.text);
+            });
+            
+            // Also handle mousedown to ensure the click registers before blur events
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
             });
             
             suggestionsList.appendChild(item);
@@ -3390,18 +3430,29 @@ function showSearchSuggestions(input, suggestions) {
         // For Enter key suggestion acceptance, always execute search
         // For click suggestions, check if query has valid syntax first
         const isFromEnterKey = arguments[1] === 'enter';
+        const isFromTabKey = arguments[1] === 'tab';
+        const query = finalText.trim();
         
-        if (isFromEnterKey || hasValidSearchSyntax(finalText.trim())) {
-            console.log('🔍 [SEARCH] Auto-executing search after suggestion application:', finalText.trim());
-            window.searchSuggestions.saveSearch(finalText.trim());
-            const searchResults = performSearch(finalText.trim());
+        // Execute search for complete patterns/queries
+        const shouldExecuteSearch = isFromEnterKey || 
+                                  isFromTabKey || 
+                                  hasValidSearchSyntax(query) ||
+                                  (!query.endsWith(':') && query.length > 0 && !query.includes('||'));
+        
+        if (shouldExecuteSearch && query.length > 0) {
+            console.log('🔍 [SEARCH] Auto-executing search after suggestion application:', query);
+            window.searchSuggestions.saveSearch(query);
+            const searchResults = performSearch(query);
             scrollToSearchResult(searchResults, 'Auto-suggestion search');
         } else {
-            console.log('🔍 [SEARCH] Query after suggestion not ready for search:', finalText.trim());
+            console.log('🔍 [SEARCH] Query after suggestion not ready for search:', query);
         }
     }, 0);
     
-    hideSuggestions();
+    // Hide suggestions after a small delay to ensure proper execution
+    setTimeout(() => {
+        hideSuggestions();
+    }, 10);
 }
 
 function hideSuggestions() {
@@ -3674,13 +3725,18 @@ $(function() {
             scrollToSearchResult(searchResults, 'Blur search');
         }
         
-        // Always hide suggestions on blur
-        hideSuggestions();
+        // Delay hiding suggestions to allow click events to process
+        setTimeout(() => {
+            hideSuggestions();
+        }, 150);
     });
 
     // Hide suggestions when clicking outside
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('.search-container')) {
+        // Don't hide if clicking on suggestion items or search container
+        if (!e.target.closest('.search-container') && 
+            !e.target.closest('.search-suggestion-item') &&
+            !e.target.closest('#searchSuggestions')) {
             hideSuggestions();
         }
     });

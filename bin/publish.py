@@ -35,7 +35,13 @@ def create_remote_pr():
         os.system(f"""
         cd {tmp}
         echo "Cloning repo..."
-        gh repo clone https://github.tools.sap/SapMachine/SapMachineIOPage repo -- --branch jfrevents
+        gh repo clone https://github.tools.sap/SapMachine/SapMachineIOPage repo -- --branch jfrevents ||  (
+            echo "Maybe login via"
+            echo "    gh auth login --hostname github.tools.sap -p ssh"
+            echo "Then call"
+            echo "    bin/publish.py create_remote_pr"
+            exit 1
+        )
         cd repo
         echo "Removing old jfrevents..."
         rm -fr jfrevents
@@ -43,9 +49,10 @@ def create_remote_pr():
         cp -r {os.path.abspath(SITE_FOLDER)} jfrevents
         echo "Creating new commit..."
         git add jfrevents
-        git commit -m "Update jfrevents"
+        echo "Committing changes..."
+        git commit -m "Update jfrevents" || (echo "No changes to commit"; exit 0)
         echo "Pushing changes..."
-        git push origin jfrevents
+        gh run git push origin jfrevents
         echo "Creating PR..."
         gh pr create --title "Update jfrevents" --body "Automated update of jfrevents site content."
         """)
