@@ -1203,7 +1203,7 @@ const searchPatterns = {
             // Map sections to CSS classes and apply hiding
             const sectionClassMap = {
                 'code-context': '.code-context',
-                'examples': '.examples',
+                'examples': '.examples-section',
                 'description': '.description, .event-description, [class*="description"]',
                 'fields': '.field-table',
                 'badges': '.badge',
@@ -1847,7 +1847,7 @@ function showAllSections() {
     // Reset visibility for all hideable sections using the same selectors as the hide action
     const allHideableSelectors = [
         '.code-context',
-        '.examples', 
+        '.examples-section', 
         '.description', 
         '.event-description', 
         '[class*="description"]',
