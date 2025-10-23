@@ -1207,7 +1207,7 @@ const searchPatterns = {
                 'description': '.description, .event-description, [class*="description"]',
                 'fields': '.field-table',
                 'badges': '.badge',
-                'configurations': '.config-table, .configuration',
+                'configurations': '.event-config, .configuration',
                 'categories': '.categories',
                 'description-missing': '.description-missing',
                 'source': '.source'
@@ -1217,7 +1217,9 @@ const searchPatterns = {
             sectionsToHide.forEach(section => {
                 const cssSelector = sectionClassMap[section];
                 if (cssSelector) {
-                    document.querySelectorAll(cssSelector).forEach(el => {
+                    const elementsToHide = document.querySelectorAll(cssSelector);
+                    console.log(`🎬 [ACTION] Hiding ${elementsToHide.length} elements for section "${section}" with selector "${cssSelector}"`);
+                    elementsToHide.forEach(el => {
                         el.style.display = 'none';
                     });
                 }
@@ -1649,6 +1651,13 @@ function evaluateTerm(term, eventElement, fileContentMap) {
                 negate: negate
             }]);
             
+            // Action patterns (like hide:) should not filter events - they always return true
+            // and execute their action after the search is complete
+            if (config.isAction) {
+                console.log(`🎬 [TERM_EVAL] Skipping action pattern '${key}' for filtering - will execute after search`);
+                return true;
+            }
+            
             // Pass fileContentMap to patterns that have fileMatcher property
             const result = config.fileMatcher 
                 ? config.match(parsedPattern, eventElement, fileContentMap)
@@ -1853,7 +1862,7 @@ function showAllSections() {
         '[class*="description"]',
         '.field-table',
         '.badge',
-        '.config-table', 
+        '.event-config', 
         '.configuration'
     ];
     
