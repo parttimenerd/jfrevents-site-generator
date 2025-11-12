@@ -1,3 +1,5 @@
+__Moved to [https://github.com/SAP/jfrevents/website](https://github.com/SAP/jfrevents/website).__
+
 [![REUSE status](https://api.reuse.software/badge/github.com/SAP/sapmachine-jfrevents-site-generator)](https://api.reuse.software/info/github.com/SAP/sapmachine-jfrevents-site-generator)
 
 JFR Events Site Generator
